@@ -26,6 +26,13 @@ namespace JN.Client.UI
             "Assets/Res/Resources/Textures/UI/MenuSwitch/大众菜单.png";
         private const string VipMenuTitleSpritePath =
             "Assets/Res/Resources/Textures/UI/MenuSwitch/贵客菜单.png";
+        private const string DebugSkipButtonSpritePath =
+            "Assets/Res/Resources/Textures/UI/Menu/horizontalPanel.png";
+        private const string DebugSkipButtonName = "btn_DebugSkipThreeStar";
+        private const string DebugSkipButtonLabel = "跳去三星酒楼";
+        private const float DebugSkipPulseMinScale = 0.95f;
+        private const float DebugSkipPulseMaxScale = 1.05f;
+        private const float DebugSkipPulseSpeed = 4f;
 
         [SerializeField] private Transform groupGoldNum;
         [SerializeField] private TextMeshProUGUI playerNameText;
@@ -95,6 +102,9 @@ namespace JN.Client.UI
         private int prestigeGainShown;
         private Coroutine prestigeGainRoutine;
         private Tween prestigeBarTween;
+        private Button debugSkipThreeStarButton;
+        private RectTransform debugSkipThreeStarRoot;
+        private Tween debugSkipPulseTween;
 
         /// <summary>
         /// 打开时缓存节点引用。
@@ -126,6 +136,9 @@ namespace JN.Client.UI
             {
                 RefreshOtherTavernHud();
             }
+
+            EnsureDebugSkipThreeStarButton();
+            RefreshDebugSkipThreeStarButtonVisibility();
         }
 
         /// <summary>
@@ -153,6 +166,13 @@ namespace JN.Client.UI
             StopPrestigeGainPresentation(restoreText: true);
             StopBusinessCountdown();
             StopCoinDelta();
+            if (debugSkipThreeStarButton != null)
+            {
+                debugSkipThreeStarButton.onClick.RemoveListener(OnClickDebugSkipThreeStar);
+            }
+
+            StopDebugSkipThreeStarPulse();
+
             TavernSceneManager.Instance?.SetWorldCustomerEnterProgressVisible(true);
             SetManagedNodesVisible(false);
         }
@@ -207,6 +227,8 @@ namespace JN.Client.UI
             HideRuntimeInfoGroup();
             RefreshTavernLevelImage();
             RefreshTaskText();
+            EnsureDebugSkipThreeStarButton();
+            RefreshDebugSkipThreeStarButtonVisibility();
         }
 
         /// <summary>
@@ -226,6 +248,8 @@ namespace JN.Client.UI
             }
 
             RefreshMenuStatusUi();
+            EnsureDebugSkipThreeStarButton();
+            RefreshDebugSkipThreeStarButtonVisibility();
         }
 
         /// <summary>
@@ -1395,6 +1419,212 @@ namespace JN.Client.UI
                 RefreshMenuStatusUi();
                 RefreshTavernLevelImage();
             }
+
+            EnsureDebugSkipThreeStarButton();
+            RefreshDebugSkipThreeStarButtonVisibility();
+        }
+
+        /// <summary>
+        /// 在面板根下创建「跳去三星酒楼」按钮（金按钮底 + 文案）；位置固定在金币组下方。
+        /// </summary>
+        private void EnsureDebugSkipThreeStarButton()
+        {
+            BindNodes();
+            if (debugSkipThreeStarButton != null && debugSkipThreeStarRoot != null)
+            {
+                ApplyDebugSkipThreeStarButtonVisual();
+                LayoutDebugSkipThreeStarButton();
+                return;
+            }
+
+            var existing = transform.Find(DebugSkipButtonName) as RectTransform;
+            if (existing != null)
+            {
+                debugSkipThreeStarRoot = existing;
+                debugSkipThreeStarButton = existing.GetComponent<Button>()
+                                           ?? existing.gameObject.AddComponent<Button>();
+                debugSkipThreeStarButton.onClick.RemoveListener(OnClickDebugSkipThreeStar);
+                debugSkipThreeStarButton.onClick.AddListener(OnClickDebugSkipThreeStar);
+                ApplyDebugSkipThreeStarButtonVisual();
+                LayoutDebugSkipThreeStarButton();
+                return;
+            }
+
+            var buttonGo = new GameObject(DebugSkipButtonName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            debugSkipThreeStarRoot = buttonGo.GetComponent<RectTransform>();
+            debugSkipThreeStarRoot.SetParent(transform, false);
+
+            debugSkipThreeStarButton = buttonGo.GetComponent<Button>();
+            ApplyDebugSkipThreeStarButtonVisual();
+            debugSkipThreeStarButton.onClick.AddListener(OnClickDebugSkipThreeStar);
+
+            var textGo = new GameObject("txt_Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.SetParent(debugSkipThreeStarRoot, false);
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(20f, 16f);
+            textRect.offsetMax = new Vector2(-20f, -16f);
+
+            var label = textGo.GetComponent<TextMeshProUGUI>();
+            label.text = DebugSkipButtonLabel;
+            label.alignment = TextAlignmentOptions.Center;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 28f;
+            label.fontSizeMax = 48f;
+            label.color = new Color(0.35f, 0.18f, 0.05f, 1f);
+            label.raycastTarget = false;
+            if (goldNumText != null && goldNumText.font != null)
+            {
+                label.font = goldNumText.font;
+            }
+            else if (tavernNameText != null && tavernNameText.font != null)
+            {
+                label.font = tavernNameText.font;
+            }
+
+            LayoutDebugSkipThreeStarButton();
+        }
+
+        private void ApplyDebugSkipThreeStarButtonVisual()
+        {
+            if (debugSkipThreeStarRoot == null)
+            {
+                return;
+            }
+
+            var image = debugSkipThreeStarRoot.GetComponent<Image>()
+                        ?? debugSkipThreeStarRoot.gameObject.AddComponent<Image>();
+            image.sprite = GameplayResourceStore.LoadAsset<Sprite>(DebugSkipButtonSpritePath);
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
+            image.raycastTarget = true;
+            if (debugSkipThreeStarButton != null)
+            {
+                debugSkipThreeStarButton.targetGraphic = image;
+            }
+        }
+
+        private void LayoutDebugSkipThreeStarButton()
+        {
+            if (debugSkipThreeStarRoot == null)
+            {
+                return;
+            }
+
+            debugSkipThreeStarRoot.SetParent(transform, false);
+            debugSkipThreeStarRoot.SetAsLastSibling();
+
+            // 顶部水平居中锚点，固定本地偏移。
+            debugSkipThreeStarRoot.anchorMin = new Vector2(0.5f, 1f);
+            debugSkipThreeStarRoot.anchorMax = new Vector2(0.5f, 1f);
+            debugSkipThreeStarRoot.pivot = new Vector2(0.5f, 0.5f);
+            debugSkipThreeStarRoot.sizeDelta = new Vector2(330f, 150f);
+            debugSkipThreeStarRoot.anchoredPosition = new Vector2(300f, -250f);
+            debugSkipThreeStarRoot.localRotation = Quaternion.identity;
+            if (debugSkipPulseTween == null || !debugSkipPulseTween.IsActive())
+            {
+                debugSkipThreeStarRoot.localScale = Vector3.one * DebugSkipPulseMinScale;
+            }
+        }
+
+        private void RefreshDebugSkipThreeStarButtonVisibility()
+        {
+            if (debugSkipThreeStarRoot == null)
+            {
+                return;
+            }
+
+            var show = ShouldShowDebugSkipThreeStarButton();
+            if (debugSkipThreeStarRoot.gameObject.activeSelf != show)
+            {
+                debugSkipThreeStarRoot.gameObject.SetActive(show);
+            }
+
+            if (show)
+            {
+                LayoutDebugSkipThreeStarButton();
+                StartDebugSkipThreeStarPulse();
+            }
+            else
+            {
+                StopDebugSkipThreeStarPulse();
+            }
+        }
+
+        private void StartDebugSkipThreeStarPulse()
+        {
+            if (debugSkipThreeStarRoot == null || !debugSkipThreeStarRoot.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            if (debugSkipPulseTween != null && debugSkipPulseTween.IsActive())
+            {
+                return;
+            }
+
+            var duration = 1f / Mathf.Max(0.01f, DebugSkipPulseSpeed);
+            debugSkipThreeStarRoot.localScale = Vector3.one * DebugSkipPulseMinScale;
+            debugSkipPulseTween = debugSkipThreeStarRoot
+                .DOScale(DebugSkipPulseMaxScale, duration)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo)
+                .SetUpdate(true);
+        }
+
+        private void StopDebugSkipThreeStarPulse()
+        {
+            if (debugSkipPulseTween != null)
+            {
+                debugSkipPulseTween.Kill();
+                debugSkipPulseTween = null;
+            }
+
+            if (debugSkipThreeStarRoot != null)
+            {
+                debugSkipThreeStarRoot.localScale = Vector3.one;
+            }
+        }
+
+        private static bool ShouldShowDebugSkipThreeStarButton()
+        {
+            var dataManager = DataManager.Instance;
+            if (dataManager == null || dataManager.IsVisitingOtherTavern)
+            {
+                return false;
+            }
+
+            var guide = dataManager.GameplayGuideData;
+            if (guide != null && guide.skipToThreeStarUsed)
+            {
+                return false;
+            }
+
+            var sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            return string.Equals(sceneName, "GamePlay_TavernWJ", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(sceneName, "GamePlay_Tavern2WJ", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void OnClickDebugSkipThreeStar()
+        {
+            GameAudioManager.PlayButtonClick();
+            var dataManager = DataManager.Instance;
+            if (dataManager == null)
+            {
+                return;
+            }
+
+            if (!dataManager.DebugSkipToThreeStarFullyBuilt(out var message))
+            {
+                HudOverlayService.ShowFloatingWarning(
+                    string.IsNullOrWhiteSpace(message) ? "跳关失败" : message);
+                return;
+            }
+
+            HudOverlayService.ShowFloatingWarning(message);
+            RefreshDebugSkipThreeStarButtonVisibility();
+            RefreshPanel();
         }
     }
 }

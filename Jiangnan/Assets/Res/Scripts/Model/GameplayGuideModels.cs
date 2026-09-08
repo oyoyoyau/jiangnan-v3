@@ -80,6 +80,8 @@ namespace JN.Client.Model
         public bool dialogUnlockMenuShown;
         /// <summary>菜单解锁旧档迁移是否已完成。</summary>
         public bool menuEntryUnlockMigrated;
+        /// <summary>是否已使用「跳去三星酒楼」按钮（用过后不再显示）。</summary>
+        public bool skipToThreeStarUsed;
     }
 
     /// <summary>
