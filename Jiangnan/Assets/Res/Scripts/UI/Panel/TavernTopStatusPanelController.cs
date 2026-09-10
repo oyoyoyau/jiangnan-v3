@@ -1622,9 +1622,8 @@ namespace JN.Client.UI
                 return;
             }
 
-            HudOverlayService.ShowFloatingWarning(message);
             RefreshDebugSkipThreeStarButtonVisibility();
-            RefreshPanel();
+            HudOverlayService.PlaySkipToThreeStarVipEnterCinematic(RefreshPanel);
         }
     }
 }

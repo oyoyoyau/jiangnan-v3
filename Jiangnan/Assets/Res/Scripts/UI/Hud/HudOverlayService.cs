@@ -568,6 +568,38 @@ namespace JN.Client.UI
                 pauseOnLastFrame: false);
         }
 
+        private const string SkipToThreeStarVipEnterVideoPath =
+            "Assets/Res/Resources/Videos/vipEnterTown.mp4";
+
+        /// <summary>
+        /// 「跳去三星酒楼」过场：暂停营业后播贵客入城视频，播完再恢复并刷新酒楼外观。
+        /// </summary>
+        public static void PlaySkipToThreeStarVipEnterCinematic(Action onFinished = null)
+        {
+            BeginGameplayPauseForUpgradeCinematic();
+
+            var clip = GameplayResourceStore.LoadAsset<VideoClip>(SkipToThreeStarVipEnterVideoPath);
+            if (clip == null)
+            {
+                Debug.LogWarning(
+                    $"[HudOverlay] 缺少贵客入城视频：{SkipToThreeStarVipEnterVideoPath}，直接进入三星酒楼。");
+                FinishSkipToThreeStarCinematic(onFinished);
+                return;
+            }
+
+            VideoWindowController.Show(
+                clip,
+                () => FinishSkipToThreeStarCinematic(onFinished),
+                pauseOnLastFrame: false);
+        }
+
+        private static void FinishSkipToThreeStarCinematic(Action onFinished)
+        {
+            EndGameplayPauseForUpgradeCinematic();
+            Scene.TavernSceneManager.Instance?.RefreshGuideWorldState();
+            onFinished?.Invoke();
+        }
+
         private static string FormatLevelUpgradeVideoPath(int newTavernLevel)
         {
             return $"Assets/Res/Resources/Videos/levelUpgradeLv{newTavernLevel}.mp4";
