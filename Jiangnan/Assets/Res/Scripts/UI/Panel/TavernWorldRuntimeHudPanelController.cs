@@ -704,7 +704,7 @@ namespace JN.Client.UI
         /// </summary>
         public GameObject ShowFoodTableServeBubble(Transform target, Sprite icon, System.Action onClick, Vector3 worldOffset)
         {
-            if (target == null || icon == null)
+            if (target == null)
             {
                 return null;
             }

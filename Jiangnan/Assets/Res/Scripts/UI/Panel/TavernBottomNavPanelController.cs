@@ -1475,7 +1475,9 @@ namespace JN.Client.UI
             var icon = colaRoot.Find("img_BtnIcon")
                        ?? HudBindingUtility.FindChildRecursive(colaRoot, "img_BtnIcon");
             var iconImage = icon != null ? icon.GetComponent<Image>() : null;
-            var colaSprite = GameplayResourceStore.LoadAsset<Sprite>(ColaBtnIconPath);
+            var colaSprite = GameplayResourceStore.LoadAsset<Sprite>(ColaBtnIconPath)
+                             ?? GameplayResourceStore.LoadAsset<Sprite>(
+                                 "Assets/Res/Resources/Textures/UI/Icons 1/酒.png");
             if (iconImage != null && colaSprite != null)
             {
                 iconImage.sprite = colaSprite;

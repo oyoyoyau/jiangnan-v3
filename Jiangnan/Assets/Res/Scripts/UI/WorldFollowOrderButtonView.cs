@@ -14,6 +14,7 @@ namespace JN.Client.UI
 
         private Transform target;
         private Vector3 worldOffset;
+        private Vector2 screenOffset;
         private RectTransform cachedRectTransform;
         private CanvasGroup cachedCanvasGroup;
         private TableOrderButtonUI orderButton;
@@ -29,6 +30,14 @@ namespace JN.Client.UI
         {
             target = followTarget;
             worldOffset = offset;
+        }
+
+        /// <summary>
+        /// 在世界跟随点上再叠一层 UI 像素偏移，用来把「上可乐」摆到上菜按钮旁边。
+        /// </summary>
+        public void SetScreenOffset(Vector2 offset)
+        {
+            screenOffset = offset;
         }
 
         /// <summary>
@@ -113,7 +122,7 @@ namespace JN.Client.UI
         {
             if (cachedRectTransform != null)
             {
-                cachedRectTransform.anchoredPosition = position;
+                cachedRectTransform.anchoredPosition = position + screenOffset;
             }
         }
 

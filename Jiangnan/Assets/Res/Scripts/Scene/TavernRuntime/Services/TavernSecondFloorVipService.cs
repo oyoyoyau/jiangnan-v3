@@ -104,12 +104,13 @@ namespace JN.Client.Scene
             }
         }
 
-        /// <summary>写入二楼贵客会话快照（坐下/上菜/已吃/已结账）。</summary>
+        /// <summary>写入二楼贵客会话快照（坐下/上菜/已吃/已结账/可乐）。</summary>
         public static void WriteSecondFloorVipSnapshot(
             bool seated,
             int servedDishCount,
             int eatenDishCount,
             int checkoutDoneCount,
+            bool colaServed = false,
             bool saveImmediately = true)
         {
             var tavern = DataManager.Instance?.SaveData?.tavern;
@@ -129,6 +130,7 @@ namespace JN.Client.Scene
             tavern.secondFloorVipCheckoutDoneCount = Mathf.Min(
                 tavern.secondFloorVipCheckoutDoneCount,
                 tavern.secondFloorVipEatenDishCount);
+            tavern.secondFloorVipColaServed = colaServed;
 
             if (saveImmediately)
             {
@@ -148,6 +150,7 @@ namespace JN.Client.Scene
             tavern.secondFloorVipServedDishCount = 0;
             tavern.secondFloorVipEatenDishCount = 0;
             tavern.secondFloorVipCheckoutDoneCount = 0;
+            tavern.secondFloorVipColaServed = false;
             if (saveImmediately)
             {
                 DataManager.Instance.SaveGame();
