@@ -17,6 +17,10 @@ namespace JN.Client.UI
     /// </summary>
     public static class HudOverlayService
     {
+        private const string WorldRuntimeHudPrefabPath =
+            "Assets/Res/Resources/UI/Panel/TavernWorldRuntimeHudPanelController.prefab";
+        private static bool worldRuntimeHudOpenFailed;
+
         /// <summary>
         /// 显示通用信息面板。
         /// </summary>
@@ -783,19 +787,22 @@ namespace JN.Client.UI
         /// 显示贵客头顶大堂/包厢气泡。
         /// </summary>
         /// <param name="privateRoomLocked">二楼未开放：包厢置灰，点击仅提示。</param>
+        /// <param name="showColaIcon">点包厢后气泡内显示可乐图标；传入 onClick 时可点击上可乐。</param>
         public static GameObject ShowVipGuestAction(
             Transform target,
             Vector3 worldOffset,
             bool usePrivateRoom,
             Action onClick,
-            bool privateRoomLocked = false)
+            bool privateRoomLocked = false,
+            bool showColaIcon = false)
         {
             return EnsureWorldRuntimeHudPanel()?.ShowVipGuestAction(
                 target,
                 worldOffset,
                 usePrivateRoom,
                 onClick,
-                privateRoomLocked);
+                privateRoomLocked,
+                showColaIcon);
         }
 
         /// <summary>
@@ -1024,14 +1031,29 @@ namespace JN.Client.UI
             var panel = UIKit.GetPanel<TavernWorldRuntimeHudPanelController>();
             if (panel != null)
             {
+                worldRuntimeHudOpenFailed = false;
                 // 不要反复置顶：否则会盖住顶栏员工/科技入口点击
                 JiangNanUIPanelLayerConfig.Apply(panel, bringToFront: false);
                 return panel;
             }
 
-            return UIKit.OpenPanel<TavernWorldRuntimeHudPanelController>(
+            if (worldRuntimeHudOpenFailed)
+            {
+                return null;
+            }
+
+            panel = UIKit.OpenPanel<TavernWorldRuntimeHudPanelController>(
                 JiangNanUIPanelLayerConfig.Resolve<TavernWorldRuntimeHudPanelController>(),
-                new TavernWorldRuntimeHudPanelControllerData());
+                new TavernWorldRuntimeHudPanelControllerData(),
+                prefabName: WorldRuntimeHudPrefabPath);
+            if (panel == null)
+            {
+                worldRuntimeHudOpenFailed = true;
+                Debug.LogError(
+                    "[HudOverlay] Failed to open TavernWorldRuntimeHudPanelController. Wait HUD / VIP bubbles unavailable.");
+            }
+
+            return panel;
         }
     }
 }

@@ -196,6 +196,11 @@ namespace JN.Client.Manager
                 SaveData.tavern.tavernPrestige = 0;
             }
 
+            if (SaveData.tavern.colaStock < 0)
+            {
+                SaveData.tavern.colaStock = 0;
+            }
+
             // 三星及以上默认已完成墙体扩建。
             if (SaveData.tavern.tavernLevel >= 3)
             {
