@@ -507,8 +507,7 @@ namespace JN.Client.UI
             Vector3 worldOffset,
             bool usePrivateRoom,
             System.Action onClick,
-            bool privateRoomLocked = false,
-            bool showColaIcon = false)
+            bool privateRoomLocked = false)
         {
             if (target == null)
             {
@@ -530,7 +529,7 @@ namespace JN.Client.UI
                 item = itemObject.AddComponent<VipGuestActionView>();
             }
 
-            item.Bind(target, worldOffset, usePrivateRoom, onClick, privateRoomLocked, showColaIcon);
+            item.Bind(target, worldOffset, usePrivateRoom, onClick, privateRoomLocked);
             TrackVipGuestAction(item);
             return itemObject;
         }

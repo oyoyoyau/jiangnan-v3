@@ -26,7 +26,6 @@ namespace JN.Client.UI
         [SerializeField] private Button staffButton;
         [SerializeField] private Button techButton;
         [SerializeField] private Button upgradeButton;
-        [SerializeField] private Button colaButton;
         [SerializeField] private Button menuButton;
         [SerializeField] private Image menuBtnIconImage;
         [SerializeField] private Button menuQuickSwitchButton;
@@ -37,10 +36,7 @@ namespace JN.Client.UI
         private const string DrumUpLakeGraySpritePath = "Assets/Res/Resources/Textures/UI/DrumUp/lake_gray.png";
         private const string PopularMenuBtnIconPath = "Assets/Res/Resources/Textures/UI/Buttons/caidan2.png";
         private const string VipMenuBtnIconPath = "Assets/Res/Resources/Textures/UI/Buttons/caidan1.png";
-        private const string ColaBtnIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/vip_Cola.png";
         private static readonly Color MenuSwitchCooldownTint = new Color32(0x64, 0x64, 0x64, 0xFF);
-        private const string ColaButtonName = "btn_Cola";
-        private const string ColaStockTextName = "txt_ColaStock";
 
         private GameObject jiaoziGroupRoot;
         private TMP_Text jiaoziCapacityText;
@@ -52,8 +48,6 @@ namespace JN.Client.UI
         private GameObject techSuggestRoot;
         private RectTransform techSuggestRect;
         private CanvasGroup techSuggestCanvasGroup;
-        private TMP_Text colaStockText;
-        private TMP_Text colaPriceText;
         private Button techSuggestButton;
         private Image techSuggestBtnBg;
         private Image techSuggestBtnIcon;
@@ -163,7 +157,6 @@ namespace JN.Client.UI
             RefreshDrumUpButton();
             RefreshStaffEntry();
             RefreshUpgradeEntry();
-            RefreshColaEntry();
             RefreshMenuEntry();
             RefreshTechEntry();
             RefreshAchievementEntry();
@@ -192,7 +185,6 @@ namespace JN.Client.UI
 
             RefreshStaffEntry();
             RefreshUpgradeEntry();
-            RefreshColaEntry();
             RefreshMenuEntry();
             RefreshTownButton();
             RefreshDrumUpButton();
@@ -212,7 +204,6 @@ namespace JN.Client.UI
             // 升星/声望变化后刷新员工、拉客与升级入口。
             RefreshStaffEntry();
             RefreshUpgradeEntry();
-            RefreshColaEntry();
             RefreshMenuEntry();
             RefreshTownButton();
             RefreshDrumUpButton();
@@ -234,7 +225,6 @@ namespace JN.Client.UI
             SetNavButtonVisible(drumUpButton, false);
             SetNavButtonVisible(staffButton, false);
             SetNavButtonVisible(upgradeButton, false);
-            SetNavButtonVisible(colaButton, false);
             SetNavButtonVisible(techButton, false);
             SetNavButtonVisible(achievementButton, false);
             if (jiaoziGroupRoot != null && jiaoziGroupRoot.activeSelf)
@@ -615,38 +605,6 @@ namespace JN.Client.UI
             upgradeButton.interactable = true;
             var canUpgrade = dataManager != null && dataManager.CanUpgradeTavernPrestigeLevel();
             RefreshUpgradeRedDot(canUpgrade);
-        }
-
-        /// <summary>
-        /// 可乐入口：与升级同显隐（自家店、非二楼下楼模式）；右上角库存，下方价格 100。
-        /// </summary>
-        private void RefreshColaEntry()
-        {
-            EnsureNodes();
-            if (colaButton == null)
-            {
-                return;
-            }
-
-            var dataManager = DataManager.Instance;
-            var visiting = dataManager != null && dataManager.IsVisitingOtherTavern;
-            var show = !visiting;
-            SetNavButtonVisible(colaButton, show);
-            if (!show)
-            {
-                return;
-            }
-
-            colaButton.interactable = true;
-            if (colaStockText != null)
-            {
-                colaStockText.text = dataManager != null ? dataManager.GetColaStock().ToString() : "0";
-            }
-
-            if (colaPriceText != null)
-            {
-                colaPriceText.text = DataManager.ColaBuyPrice.ToString();
-            }
         }
 
         /// <summary>
@@ -1390,7 +1348,6 @@ namespace JN.Client.UI
 
             upgradeButton ??= bottomButtonsRoot.Find("btn_Upgrade")?.GetComponent<Button>()
                               ?? HudBindingUtility.FindChildRecursive(hudRoot, "btn_Upgrade")?.GetComponent<Button>();
-            EnsureColaButton(bottomButtonsRoot, hudRoot);
             menuButton ??= bottomButtonsRoot.Find("btn_Menu")?.GetComponent<Button>()
                            ?? HudBindingUtility.FindChildRecursive(hudRoot, "btn_Menu")?.GetComponent<Button>();
             EnsureMenuCountDownNode();
@@ -1415,140 +1372,6 @@ namespace JN.Client.UI
 
             EnsureJiaoziNodes();
             EnsureTechExtraNodes();
-        }
-
-        /// <summary>
-        /// 在升级与菜单之间克隆升级按钮作为可乐入口（同尺寸、同按压缩放）。
-        /// </summary>
-        private void EnsureColaButton(Transform bottomButtonsRoot, Transform hudRoot)
-        {
-            if (colaButton == null)
-            {
-                colaButton = bottomButtonsRoot != null
-                    ? bottomButtonsRoot.Find(ColaButtonName)?.GetComponent<Button>()
-                    : null;
-                colaButton ??= HudBindingUtility.FindChildRecursive(hudRoot, ColaButtonName)?.GetComponent<Button>();
-            }
-
-            if (colaButton == null && upgradeButton != null)
-            {
-                var parent = upgradeButton.transform.parent;
-                var clone = Instantiate(upgradeButton.gameObject, parent, false);
-                clone.name = ColaButtonName;
-                var sibling = upgradeButton.transform.GetSiblingIndex() + 1;
-                clone.transform.SetSiblingIndex(sibling);
-                colaButton = clone.GetComponent<Button>();
-                if (colaButton != null)
-                {
-                    colaButton.onClick = new Button.ButtonClickedEvent();
-                }
-
-                ApplyColaButtonVisual(clone.transform);
-            }
-
-            if (colaButton == null)
-            {
-                return;
-            }
-
-            colaStockText ??= HudBindingUtility.FindChildRecursive(colaButton.transform, ColaStockTextName)
-                ?.GetComponent<TMP_Text>();
-            colaPriceText ??= colaButton.transform.Find("Text (TMP)")?.GetComponent<TMP_Text>()
-                              ?? HudBindingUtility.FindChildRecursive(colaButton.transform, "Text (TMP)")
-                                  ?.GetComponent<TMP_Text>();
-        }
-
-        private void ApplyColaButtonVisual(Transform colaRoot)
-        {
-            if (colaRoot == null)
-            {
-                return;
-            }
-
-            var redDot = colaRoot.Find("img_Red")
-                         ?? HudBindingUtility.FindChildRecursive(colaRoot, "img_Red");
-            if (redDot != null)
-            {
-                redDot.gameObject.SetActive(false);
-            }
-
-            var icon = colaRoot.Find("img_BtnIcon")
-                       ?? HudBindingUtility.FindChildRecursive(colaRoot, "img_BtnIcon");
-            var iconImage = icon != null ? icon.GetComponent<Image>() : null;
-            var colaSprite = GameplayResourceStore.LoadAsset<Sprite>(ColaBtnIconPath);
-            if (iconImage != null && colaSprite != null)
-            {
-                iconImage.sprite = colaSprite;
-                iconImage.preserveAspect = true;
-                iconImage.color = Color.white;
-            }
-
-            var fontSource = colaRoot.GetComponentInChildren<TMP_Text>(true);
-            var priceTf = colaRoot.Find("Text (TMP)");
-            if (priceTf != null)
-            {
-                priceTf.gameObject.SetActive(true);
-                colaPriceText = priceTf.GetComponent<TMP_Text>();
-                StyleColaHudText(colaPriceText, fontSource, 36);
-                if (colaPriceText != null)
-                {
-                    colaPriceText.text = DataManager.ColaBuyPrice.ToString();
-                    colaPriceText.alignment = TextAlignmentOptions.Center;
-                }
-            }
-
-            var stockTf = colaRoot.Find(ColaStockTextName);
-            if (stockTf == null)
-            {
-                var stockGo = new GameObject(ColaStockTextName, typeof(RectTransform), typeof(TextMeshProUGUI));
-                stockGo.transform.SetParent(colaRoot, false);
-                var stockRect = stockGo.GetComponent<RectTransform>();
-                stockRect.anchorMin = new Vector2(1f, 1f);
-                stockRect.anchorMax = new Vector2(1f, 1f);
-                stockRect.pivot = new Vector2(1f, 1f);
-                stockRect.anchoredPosition = new Vector2(-6f, -4f);
-                stockRect.sizeDelta = new Vector2(90f, 42f);
-                colaStockText = stockGo.GetComponent<TextMeshProUGUI>();
-            }
-            else
-            {
-                colaStockText = stockTf.GetComponent<TMP_Text>();
-            }
-
-            StyleColaHudText(colaStockText, fontSource, 32);
-            if (colaStockText != null)
-            {
-                colaStockText.alignment = TextAlignmentOptions.TopRight;
-                colaStockText.text = DataManager.Instance != null
-                    ? DataManager.Instance.GetColaStock().ToString()
-                    : "0";
-            }
-        }
-
-        private static void StyleColaHudText(TMP_Text text, TMP_Text fontSource, float fontSize)
-        {
-            if (text == null)
-            {
-                return;
-            }
-
-            if (fontSource != null && fontSource != text && fontSource.font != null)
-            {
-                text.font = fontSource.font;
-                text.fontSharedMaterial = fontSource.fontSharedMaterial;
-            }
-            else if (text.font == null && TMP_Settings.defaultFontAsset != null)
-            {
-                text.font = TMP_Settings.defaultFontAsset;
-            }
-
-            text.fontSize = fontSize;
-            text.color = Color.white;
-            text.raycastTarget = false;
-            text.enableWordWrapping = false;
-            text.overflowMode = TextOverflowModes.Overflow;
-            text.outlineWidth = 0.22f;
-            text.outlineColor = Color.black;
         }
 
         private void EnsureTechExtraNodes()
@@ -1589,7 +1412,6 @@ namespace JN.Client.UI
             BindNavButton(drumUpButton, OnClickDrumUpButton);
             BindNavButton(staffButton, OnClickStaffButton);
             BindNavButton(upgradeButton, OnClickUpgradeButton);
-            BindNavButton(colaButton, OnClickColaButton);
             BindNavButton(menuButton, OnClickMenuButton);
             BindNavButton(downStairButton, OnClickDownStairButton);
             BindNavButton(techButton, OnClickTechButton);
@@ -1630,32 +1452,6 @@ namespace JN.Client.UI
             }
 
             HudOverlayService.ShowUpgradeTavernPanel();
-        }
-
-        private void OnClickColaButton()
-        {
-            if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
-            {
-                return;
-            }
-
-            var dataManager = DataManager.Instance;
-            if (dataManager == null)
-            {
-                return;
-            }
-
-            if (!dataManager.TryBuyCola(out var message))
-            {
-                if (!string.IsNullOrWhiteSpace(message))
-                {
-                    HudOverlayService.ShowFloatingWarning(message);
-                }
-
-                return;
-            }
-
-            RefreshColaEntry();
         }
 
         private void OnClickMenuButton()

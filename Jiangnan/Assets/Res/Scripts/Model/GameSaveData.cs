@@ -122,9 +122,6 @@ namespace JN.Client.Model
         /// 菜单切换冷却结束 UTC Unix 秒；0 表示无冷却。
         /// </summary>
         public double menuSwitchCooldownEndUnixTime;
-
-        /// <summary>店内可乐库存（底栏购买，贵客点头顶可乐消耗）。</summary>
-        public int colaStock;
     }
 
     /// <summary>

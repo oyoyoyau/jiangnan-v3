@@ -2464,12 +2464,7 @@ namespace JN.Client.Scene
 
             if (customer != null && pendingSecondFloorVipCustomers.Remove(customer))
             {
-                var goingToSecondFloor = customer.WalkoutReason == CustomerWalkoutReason.None;
-                TavernSecondFloorVipService.SetSecondFloorVipGuest(goingToSecondFloor);
-                if (!goingToSecondFloor)
-                {
-                    RefreshFirstFloorVipPrivateRoomBubbles();
-                }
+                TavernSecondFloorVipService.SetSecondFloorVipGuest(true);
             }
 
             customerFlowService.HandleCustomerExited(

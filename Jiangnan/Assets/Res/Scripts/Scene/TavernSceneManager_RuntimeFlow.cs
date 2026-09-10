@@ -2068,72 +2068,6 @@ namespace JN.Client.Scene
             vipGuestActionRoots.Clear();
         }
 
-        /// <summary>点包厢后：同一套圆形气泡改为可乐图标；clickable 时点图标消耗库存再上楼。</summary>
-        private void ShowVipColaDemandBubble(TavernCustomerRuntimeController customer, bool clickable)
-        {
-            if (customer == null)
-            {
-                return;
-            }
-
-            ClearVipGuestActionBubble(customer);
-            var root = HudOverlayService.ShowVipGuestAction(
-                customer.transform,
-                new Vector3(0f, VipGuestActionView.DefaultHeadOffsetY, 0f),
-                usePrivateRoom: false,
-                onClick: clickable ? () => OnVipColaDemandClicked(customer) : null,
-                showColaIcon: true);
-            if (root != null)
-            {
-                vipGuestActionRoots[customer] = root;
-            }
-        }
-
-        private void OnVipColaDemandClicked(TavernCustomerRuntimeController customer)
-        {
-            if (customer == null || customer.IsLeavingTavern)
-            {
-                return;
-            }
-
-            var dataManager = DataManager.Instance;
-            if (dataManager == null || !dataManager.TryConsumeCola())
-            {
-                HudOverlayService.ShowFloatingWarning("可乐不足");
-                return;
-            }
-
-            ClearVipGuestActionBubble(customer);
-            HudOverlayService.ShowCustomerReviewTip(
-                customer.transform,
-                "我很满意，给你小费",
-                durationSeconds: 2f);
-
-            AwardVipColaServeReward(customer);
-
-            customer.SetAwaitingVipFloorChoice(false);
-            BeginVipGoToSecondFloorPrivateRoom(customer);
-        }
-
-        private void AwardVipColaServeReward(TavernCustomerRuntimeController customer)
-        {
-            var reward = DataManager.VipColaServeReward;
-            if (reward <= 0 || DataManager.Instance == null)
-            {
-                return;
-            }
-
-            CoinDisplayRefreshCoordinator.DeferGoldRefreshUntilFlyComplete();
-            GameAudioManager.PlayVipCheckoutCoins();
-            var source = customer != null ? customer.transform : null;
-            if (!TryPlayCoinFlyToTop(source, CoinDisplayRefreshCoordinator.NotifyFlyComplete))
-            {
-                CoinDisplayRefreshCoordinator.NotifyFlyComplete();
-            }
-
-            DataManager.Instance.ChangeCoinNum(reward);
-        }
-
         private void OnVipGuestActionClicked(TavernCustomerRuntimeController customer, bool usePrivateRoom)
         {
             if (customer == null)
@@ -2150,27 +2084,14 @@ namespace JN.Client.Scene
                     return;
                 }
 
-                // 一点包厢：先占住本局二楼名额、头顶换成可乐；自家店等点可乐后再上楼，拜访店立刻上楼。
+                // 一点包厢立刻占位，避免其它贵客在上楼途中仍能点成功。
                 pendingSecondFloorVipCustomers.Add(customer);
-                var visiting = DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern;
-                if (visiting)
-                {
-                    ShowVipColaDemandBubble(customer, clickable: false);
-                    customer.SetAwaitingVipFloorChoice(false);
-                    GameAudioManager.PlayVipArrival();
-                    BeginVipGoToSecondFloorPrivateRoom(customer);
-                }
-                else
-                {
-                    NotifyCustomerLeftQueue(customer);
-                    ReleaseCustomerWaitHudForCustomer(customer);
-                    customer.SetAwaitingVipFloorChoice(true);
-                    ShowVipColaDemandBubble(customer, clickable: true);
-                    GameAudioManager.PlayVipArrival();
-                }
-
+                TavernSecondFloorVipService.SetSecondFloorVipGuest(true);
+                ClearVipGuestActionBubble(customer);
+                customer.SetAwaitingVipFloorChoice(false);
+                GameAudioManager.PlayVipArrival();
+                BeginVipGoToSecondFloorPrivateRoom(customer);
                 RefreshFirstFloorVipPrivateRoomBubbles();
-                Signals.Get<TavernRuntimeChangedSignal>().Dispatch();
                 return;
             }
 
@@ -2229,7 +2150,6 @@ namespace JN.Client.Scene
             }
 
             pendingSecondFloorVipCustomers.Add(customer);
-            TavernSecondFloorVipService.SetSecondFloorVipGuest(true);
             customer.SetExitPosition(exitPos);
             customer.LeaveTavern();
         }

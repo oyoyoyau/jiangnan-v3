@@ -16,9 +16,6 @@ namespace JN.Client.UI
 
         private const string DatangIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/vip_Datang.png";
         private const string BaoxiangIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/vip_Baoxiang.png";
-        private const string ColaIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/vip_Cola.png";
-        private static readonly Vector2 DefaultIconSize = new(110f, 75f);
-        private static readonly Vector2 ColaIconSize = new(72f, 88f);
         /// <summary>二楼不可用时包厢按钮置灰色（#CDCDCD）。</summary>
         private static readonly Color LockedPrivateRoomTint = new(0xCD / 255f, 0xCD / 255f, 0xCD / 255f, 1f);
 
@@ -27,7 +24,6 @@ namespace JN.Client.UI
         [SerializeField] private TextMeshProUGUI actionText;
         [SerializeField] private Sprite datangSprite;
         [SerializeField] private Sprite baoxiangSprite;
-        [SerializeField] private Sprite colaSprite;
 
         private RectTransform cachedRectTransform;
         private CanvasGroup cachedCanvasGroup;
@@ -37,8 +33,6 @@ namespace JN.Client.UI
         private bool isVisible = true;
         private bool clickConsumed;
         private bool privateRoomLocked;
-        private bool showColaIcon;
-        private bool colaClickable;
 
         /// <summary>外部容器据此销毁条目。</summary>
         public bool ShouldRelease { get; private set; }
@@ -55,15 +49,13 @@ namespace JN.Client.UI
         /// <summary>
         /// 绑定跟随目标，并按是否走包厢刷新图标/文案与点击回调。
         /// privateRoomLocked：包厢不可用时置灰，点击仅提示、不收起气泡。
-        /// showColaIcon：点包厢后改为只显示可乐图标；传入 onClick 时可点击上可乐。
         /// </summary>
         public void Bind(
             Transform target,
             Vector3 offset,
             bool usePrivateRoom,
             Action onClick,
-            bool privateRoomLocked = false,
-            bool showColaIcon = false)
+            bool privateRoomLocked = false)
         {
             CacheNodes();
             EnsureComponents();
@@ -72,21 +64,11 @@ namespace JN.Client.UI
             clickHandler = onClick;
             clickConsumed = false;
             ShouldRelease = false;
-            this.showColaIcon = showColaIcon;
             this.privateRoomLocked = privateRoomLocked && usePrivateRoom;
             IsPrivateRoomAction = usePrivateRoom;
-            colaClickable = showColaIcon && onClick != null;
             ApplyActionVisual(usePrivateRoom);
             ApplyLockedTint(this.privateRoomLocked);
-            if (showColaIcon && !colaClickable)
-            {
-                BindColaDisplayOnly();
-            }
-            else
-            {
-                BindClick();
-            }
-
+            BindClick();
             SetVisible(true);
         }
 
@@ -108,10 +90,9 @@ namespace JN.Client.UI
             isVisible = visible;
             if (cachedCanvasGroup != null)
             {
-                var allowClick = visible && !clickConsumed && (!showColaIcon || colaClickable);
                 cachedCanvasGroup.alpha = visible ? 1f : 0f;
-                cachedCanvasGroup.blocksRaycasts = allowClick;
-                cachedCanvasGroup.interactable = allowClick;
+                cachedCanvasGroup.blocksRaycasts = visible && !clickConsumed;
+                cachedCanvasGroup.interactable = visible && !clickConsumed;
             }
         }
 
@@ -179,27 +160,16 @@ namespace JN.Client.UI
 
         private void ApplyActionVisual(bool usePrivateRoom)
         {
-            var sprite = showColaIcon
-                ? ResolveColaSprite()
-                : (usePrivateRoom ? ResolveBaoxiangSprite() : ResolveDatangSprite());
+            var sprite = usePrivateRoom ? ResolveBaoxiangSprite() : ResolveDatangSprite();
             if (iconImage != null && sprite != null)
             {
                 iconImage.sprite = sprite;
                 iconImage.preserveAspect = true;
-                var iconRect = iconImage.rectTransform;
-                if (iconRect != null)
-                {
-                    iconRect.sizeDelta = showColaIcon ? ColaIconSize : DefaultIconSize;
-                }
             }
 
             if (actionText != null)
             {
-                actionText.gameObject.SetActive(!showColaIcon);
-                if (!showColaIcon)
-                {
-                    actionText.text = usePrivateRoom ? "包厢" : "大堂";
-                }
+                actionText.text = usePrivateRoom ? "包厢" : "大堂";
             }
         }
 
@@ -246,17 +216,6 @@ namespace JN.Client.UI
             return baoxiangSprite;
         }
 
-        private Sprite ResolveColaSprite()
-        {
-            if (colaSprite != null)
-            {
-                return colaSprite;
-            }
-
-            colaSprite = GameplayResourceStore.LoadAsset<Sprite>(ColaIconPath);
-            return colaSprite;
-        }
-
         private void BindClick()
         {
             if (iconButton == null)
@@ -270,16 +229,6 @@ namespace JN.Client.UI
             iconButton.interactable = true;
         }
 
-        /// <summary>可乐需求气泡只展示，不接收点击。</summary>
-        private void BindColaDisplayOnly()
-        {
-            if (iconButton != null)
-            {
-                iconButton.onClick.RemoveListener(HandleClick);
-                iconButton.interactable = false;
-            }
-        }
-
         private void HandleClick()
         {
             if (clickConsumed || ShouldRelease)
@@ -288,13 +237,6 @@ namespace JN.Client.UI
             }
 
             GameAudioManager.PlayButtonClick();
-
-            // 可乐需求：由外部判定库存；不足时气泡保留，可再点。
-            if (showColaIcon && colaClickable)
-            {
-                clickHandler?.Invoke();
-                return;
-            }
 
             // 未开放二楼：只飘字，气泡保留，贵客继续等待选择。
             if (privateRoomLocked)
