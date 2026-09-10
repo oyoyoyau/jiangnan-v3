@@ -1622,9 +1622,13 @@ namespace JN.Client.UI
                 return;
             }
 
-            HudOverlayService.ShowFloatingWarning(message);
             RefreshDebugSkipThreeStarButtonVisibility();
             RefreshPanel();
+            HudOverlayService.PlayVipEnterTownCinematic(() =>
+            {
+                Scene.TavernSceneManager.Instance?.RefreshGuideWorldState();
+                RefreshPanel();
+            });
         }
     }
 }

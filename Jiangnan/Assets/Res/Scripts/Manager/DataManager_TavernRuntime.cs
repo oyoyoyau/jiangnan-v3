@@ -375,6 +375,64 @@ namespace JN.Client.Manager
             return GetMenuSwitchCooldownRemainingSeconds() <= 0f;
         }
 
+        /// <summary>底栏购买一杯可乐的铜钱价格。</summary>
+        public const int ColaBuyPrice = 100;
+
+        /// <summary>贵客点头顶可乐后打赏的铜钱。</summary>
+        public const int VipColaServeReward = 1000;
+
+        /// <summary>当前可乐库存。</summary>
+        public int GetColaStock()
+        {
+            EnsureTavernDefaults();
+            return Mathf.Max(0, SaveData.tavern.colaStock);
+        }
+
+        /// <summary>
+        /// 花费 100 铜钱买入一杯可乐（可囤货）。拜访他人店不可买。
+        /// </summary>
+        public bool TryBuyCola(out string message)
+        {
+            EnsureTavernDefaults();
+            message = null;
+            if (IsVisitingOtherTavern)
+            {
+                message = "拜访中无法购买可乐";
+                return false;
+            }
+
+            if (PlayerData == null || PlayerData.coinNum < ColaBuyPrice)
+            {
+                message = $"铜钱不足，购买可乐需要 {ColaBuyPrice}";
+                return false;
+            }
+
+            SaveData.tavern.colaStock = GetColaStock() + 1;
+            ChangeCoinNum(-ColaBuyPrice);
+            Signals.Get<TavernRuntimeChangedSignal>().Dispatch();
+            return true;
+        }
+
+        /// <summary>消耗一杯库存可乐。库存不足或拜访他人店时失败。</summary>
+        public bool TryConsumeCola()
+        {
+            EnsureTavernDefaults();
+            if (IsVisitingOtherTavern)
+            {
+                return false;
+            }
+
+            if (SaveData.tavern.colaStock <= 0)
+            {
+                return false;
+            }
+
+            SaveData.tavern.colaStock -= 1;
+            SaveGame();
+            Signals.Get<TavernRuntimeChangedSignal>().Dispatch();
+            return true;
+        }
+
         /// <summary>
         /// 大众菜单对常时刷客间隔的倍率（未满二星、拜访他人店或贵客菜单时为 1）。
         /// </summary>

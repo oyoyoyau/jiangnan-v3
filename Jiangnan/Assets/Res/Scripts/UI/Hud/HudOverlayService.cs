@@ -17,6 +17,10 @@ namespace JN.Client.UI
     /// </summary>
     public static class HudOverlayService
     {
+        private const string WorldRuntimeHudPrefabPath =
+            "Assets/Res/Resources/UI/Panel/TavernWorldRuntimeHudPanelController.prefab";
+        private static bool worldRuntimeHudOpenFailed;
+
         /// <summary>
         /// 显示通用信息面板。
         /// </summary>
@@ -137,6 +141,7 @@ namespace JN.Client.UI
         }
 
         private const string FirstEnterTavernVideoPath = "Assets/Res/Resources/Videos/enterTavern.mp4";
+        private const string VipEnterTownVideoPath = "Assets/Res/Resources/Videos/vipEnterTown.mp4";
 
         /// <summary>
         /// 当前主线任务变化时播对应对话（各一次；有对话面板打开时跳过）。
@@ -564,6 +569,32 @@ namespace JN.Client.UI
                 pauseOnLastFrame: false);
         }
 
+        /// <summary>
+        /// 跳到三星酒楼后播贵客入城过场；期间暂停营业时间，VideoPlayer 仍走实时时钟。
+        /// </summary>
+        public static void PlayVipEnterTownCinematic(Action onFinished = null)
+        {
+            BeginGameplayPauseForUpgradeCinematic();
+
+            var clip = GameplayResourceStore.LoadAsset<VideoClip>(VipEnterTownVideoPath);
+            if (clip == null)
+            {
+                Debug.LogWarning($"[HudOverlay] 缺少贵客入城视频：{VipEnterTownVideoPath}，跳过过场。");
+                EndGameplayPauseForUpgradeCinematic();
+                onFinished?.Invoke();
+                return;
+            }
+
+            VideoWindowController.Show(
+                clip,
+                () =>
+                {
+                    EndGameplayPauseForUpgradeCinematic();
+                    onFinished?.Invoke();
+                },
+                pauseOnLastFrame: false);
+        }
+
         private static string FormatLevelUpgradeVideoPath(int newTavernLevel)
         {
             return $"Assets/Res/Resources/Videos/levelUpgradeLv{newTavernLevel}.mp4";
@@ -783,19 +814,22 @@ namespace JN.Client.UI
         /// 显示贵客头顶大堂/包厢气泡。
         /// </summary>
         /// <param name="privateRoomLocked">二楼未开放：包厢置灰，点击仅提示。</param>
+        /// <param name="showColaIcon">点包厢后气泡内显示可乐图标；传入 onClick 时可点击上可乐。</param>
         public static GameObject ShowVipGuestAction(
             Transform target,
             Vector3 worldOffset,
             bool usePrivateRoom,
             Action onClick,
-            bool privateRoomLocked = false)
+            bool privateRoomLocked = false,
+            bool showColaIcon = false)
         {
             return EnsureWorldRuntimeHudPanel()?.ShowVipGuestAction(
                 target,
                 worldOffset,
                 usePrivateRoom,
                 onClick,
-                privateRoomLocked);
+                privateRoomLocked,
+                showColaIcon);
         }
 
         /// <summary>
@@ -1024,14 +1058,29 @@ namespace JN.Client.UI
             var panel = UIKit.GetPanel<TavernWorldRuntimeHudPanelController>();
             if (panel != null)
             {
+                worldRuntimeHudOpenFailed = false;
                 // 不要反复置顶：否则会盖住顶栏员工/科技入口点击
                 JiangNanUIPanelLayerConfig.Apply(panel, bringToFront: false);
                 return panel;
             }
 
-            return UIKit.OpenPanel<TavernWorldRuntimeHudPanelController>(
+            if (worldRuntimeHudOpenFailed)
+            {
+                return null;
+            }
+
+            panel = UIKit.OpenPanel<TavernWorldRuntimeHudPanelController>(
                 JiangNanUIPanelLayerConfig.Resolve<TavernWorldRuntimeHudPanelController>(),
-                new TavernWorldRuntimeHudPanelControllerData());
+                new TavernWorldRuntimeHudPanelControllerData(),
+                prefabName: WorldRuntimeHudPrefabPath);
+            if (panel == null)
+            {
+                worldRuntimeHudOpenFailed = true;
+                Debug.LogError(
+                    "[HudOverlay] Failed to open TavernWorldRuntimeHudPanelController. Wait HUD / VIP bubbles unavailable.");
+            }
+
+            return panel;
         }
     }
 }

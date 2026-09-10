@@ -131,8 +131,50 @@ namespace AkiFramework.UI
                     }
                 }
 
-                // 3) 再尝试把 key 当 Resources 相对路径（由调用方保证格式）
-                return Resources.Load<GameObject>(key);
+                // 3) Resources 相对路径：完整 key，或 UI/Panel|Window|Scene/{文件名}
+                var byResourcesKey = Resources.Load<GameObject>(key);
+                if (byResourcesKey != null)
+                {
+                    return byResourcesKey;
+                }
+
+                var fileName = GetFileNameWithoutExtension(key);
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return null;
+                }
+
+                var resourceCandidates = new[]
+                {
+                    $"UI/Panel/{fileName}",
+                    $"UI/Window/{fileName}",
+                    $"UI/Scene/{fileName}",
+                    fileName
+                };
+                for (var i = 0; i < resourceCandidates.Length; i++)
+                {
+                    var prefab = Resources.Load<GameObject>(resourceCandidates[i]);
+                    if (prefab != null)
+                    {
+                        return prefab;
+                    }
+                }
+
+                return null;
+            }
+
+            private static string GetFileNameWithoutExtension(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return null;
+                }
+
+                var normalized = path.Replace('\\', '/');
+                var slash = normalized.LastIndexOf('/');
+                var name = slash >= 0 ? normalized[(slash + 1)..] : normalized;
+                var dot = name.LastIndexOf('.');
+                return dot > 0 ? name[..dot] : name;
             }
         }
     }

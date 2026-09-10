@@ -118,7 +118,9 @@ namespace JN.Client.UI
             // TavernTempEmployPanelController 暂不打开（临时招募入口停用，脚本与预制体保留）。
             hudRootCoordinator.EnsureOpened<TavernBottomNavPanelController>(uiData: hudData);
             hudRootCoordinator.EnsureOpened<TavernBusinessFlowPanelController>(uiData: hudData);
-            hudRootCoordinator.EnsureOpened<TavernWorldRuntimeHudPanelController>(bringToFront: false);
+            hudRootCoordinator.EnsureOpened<TavernWorldRuntimeHudPanelController>(
+                bringToFront: false,
+                prefabName: "Assets/Res/Resources/UI/Panel/TavernWorldRuntimeHudPanelController.prefab");
             EnsureInteractiveHudPanelsOnTop();
         }
 

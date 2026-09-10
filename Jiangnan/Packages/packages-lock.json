@@ -33,12 +33,6 @@
       "dependencies": {},
       "hash": "3a039c62614ed7b962b868ee96163b7e4dce0849"
     },
-    "com.ta.foldercommenttool": {
-      "version": "file:com.ta.foldercommenttool",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
-    },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
       "depth": 0,
