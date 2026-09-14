@@ -378,8 +378,23 @@ namespace JN.Client.Manager
         /// <summary>底栏购买一杯可乐的铜钱价格。</summary>
         public const int ColaBuyPrice = 100;
 
-        /// <summary>贵客点头顶可乐后打赏的铜钱。</summary>
-        public const int VipColaServeReward = 1000;
+        /// <summary>每位贵客最多上可乐次数。</summary>
+        public const int VipColaServeCount = 3;
+
+        /// <summary>二楼上可乐卖出价：第 1/2/3 次。</summary>
+        public static readonly int[] VipColaServePrices = { 188, 888, 1888 };
+
+        /// <summary>第 serveIndex 次上可乐的卖出价（0 起）。</summary>
+        public static int GetVipColaServePrice(int serveIndex)
+        {
+            if (VipColaServePrices == null || VipColaServePrices.Length == 0)
+            {
+                return 0;
+            }
+
+            var index = Mathf.Clamp(serveIndex, 0, VipColaServePrices.Length - 1);
+            return Mathf.Max(0, VipColaServePrices[index]);
+        }
 
         /// <summary>当前可乐库存。</summary>
         public int GetColaStock()

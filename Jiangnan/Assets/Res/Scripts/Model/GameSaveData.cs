@@ -113,8 +113,11 @@ namespace JN.Client.Model
         /// <summary>二楼贵客已结账道数（0~6）。</summary>
         public int secondFloorVipCheckoutDoneCount;
 
-        /// <summary>本轮二楼贵客是否已上过可乐。</summary>
+        /// <summary>本轮二楼贵客是否已上完可乐（三次）。兼容旧档。</summary>
         public bool secondFloorVipColaServed;
+
+        /// <summary>本轮二楼贵客已上可乐次数（0~3）。</summary>
+        public int secondFloorVipColaServedCount;
 
         /// <summary>
         /// 当前选用菜单：0=大众菜单（默认），1=贵客菜单。

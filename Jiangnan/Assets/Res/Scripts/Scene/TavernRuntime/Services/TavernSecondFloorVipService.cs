@@ -104,13 +104,13 @@ namespace JN.Client.Scene
             }
         }
 
-        /// <summary>写入二楼贵客会话快照（坐下/上菜/已吃/已结账/可乐）。</summary>
+        /// <summary>写入二楼贵客会话快照（坐下/上菜/已吃/已结账/可乐次数）。</summary>
         public static void WriteSecondFloorVipSnapshot(
             bool seated,
             int servedDishCount,
             int eatenDishCount,
             int checkoutDoneCount,
-            bool colaServed = false,
+            int colaServedCount = 0,
             bool saveImmediately = true)
         {
             var tavern = DataManager.Instance?.SaveData?.tavern;
@@ -130,7 +130,11 @@ namespace JN.Client.Scene
             tavern.secondFloorVipCheckoutDoneCount = Mathf.Min(
                 tavern.secondFloorVipCheckoutDoneCount,
                 tavern.secondFloorVipEatenDishCount);
-            tavern.secondFloorVipColaServed = colaServed;
+            tavern.secondFloorVipColaServedCount = Mathf.Clamp(
+                colaServedCount,
+                0,
+                DataManager.VipColaServeCount);
+            tavern.secondFloorVipColaServed = tavern.secondFloorVipColaServedCount >= DataManager.VipColaServeCount;
 
             if (saveImmediately)
             {
@@ -151,6 +155,7 @@ namespace JN.Client.Scene
             tavern.secondFloorVipEatenDishCount = 0;
             tavern.secondFloorVipCheckoutDoneCount = 0;
             tavern.secondFloorVipColaServed = false;
+            tavern.secondFloorVipColaServedCount = 0;
             if (saveImmediately)
             {
                 DataManager.Instance.SaveGame();
@@ -178,6 +183,24 @@ namespace JN.Client.Scene
             eatenDishCount = Mathf.Clamp(tavern.secondFloorVipEatenDishCount, 0, servedDishCount);
             checkoutDoneCount = Mathf.Clamp(tavern.secondFloorVipCheckoutDoneCount, 0, eatenDishCount);
             return true;
+        }
+
+        /// <summary>读取本轮已上可乐次数；旧档只有 bool 且已上过则视为三次完成。</summary>
+        public static int ReadColaServedCount()
+        {
+            var tavern = DataManager.Instance?.SaveData?.tavern;
+            if (tavern == null)
+            {
+                return 0;
+            }
+
+            var count = Mathf.Clamp(tavern.secondFloorVipColaServedCount, 0, DataManager.VipColaServeCount);
+            if (count <= 0 && tavern.secondFloorVipColaServed)
+            {
+                return DataManager.VipColaServeCount;
+            }
+
+            return count;
         }
 
         /// <summary>

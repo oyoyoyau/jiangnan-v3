@@ -37,6 +37,7 @@ namespace JN.Client.Scene
         private const int TipCheckoutClickCount = 6;
         private const string VipSitOrderLine = "把最好的端上来";
         private const string VipTipThanksLine = "我很满意，给你小费";
+        private const string VipColaAskMoreLine = "不够，再来一瓶！";
         private const string VipMenuFarewellLine = "今日尽兴，改日再来";
         private const string PopularMenuFirstComplaintLine = "都是些粗茶淡饭";
         private const string PopularMenuSecondComplaintLine = "饭菜欠妥浅尝即可";
@@ -88,7 +89,7 @@ namespace JN.Client.Scene
         private GameObject orderBubbleRoot;
         private GameObject colaServeBubbleRoot;
         private bool orderClicked;
-        private bool colaServed;
+        private int colaServedCount;
         private bool colaServing;
         private bool sessionRunning;
         private bool vipSeated;
@@ -190,7 +191,7 @@ namespace JN.Client.Scene
                 CountServedDishes(),
                 eatenCount,
                 checkoutDoneCount,
-                colaServed,
+                colaServedCount,
                 saveImmediately);
         }
 
@@ -347,8 +348,7 @@ namespace JN.Client.Scene
                 out var servedCount,
                 out eatenCount,
                 out checkoutDoneCount);
-            colaServed = DataManager.Instance?.SaveData?.tavern != null
-                         && DataManager.Instance.SaveData.tavern.secondFloorVipColaServed;
+            colaServedCount = TavernSecondFloorVipService.ReadColaServedCount();
             colaServing = false;
 
             for (var i = 0; i < servedFlags.Length; i++)
@@ -362,6 +362,7 @@ namespace JN.Client.Scene
             yield return EnterVipAndSitRoutine();
             vipSeated = true;
             PersistSnapshot();
+            ShowColaServeBubble();
 
             // 第一道批：入座说话后出点单；贵客菜单按每批两道循环，大众菜单保持原点单后差评离店。
             var needsFirstOrder = !servedFlags[0] && eatenCount <= 0;
@@ -774,6 +775,7 @@ namespace JN.Client.Scene
             }
 
             HideOrderBubble();
+            ShowColaServeBubble();
         }
 
         private IEnumerator ShowVipSpeechRoutine(string line, float seconds)
@@ -1243,6 +1245,7 @@ namespace JN.Client.Scene
         private IEnumerator FinishSessionRoutine()
         {
             HideOrderBubble();
+            HideColaServeBubble();
             if (tipCheckoutClickCount < TipCheckoutClickCount)
             {
                 if (tipCheckoutClickCount <= 0)
@@ -1468,7 +1471,6 @@ namespace JN.Client.Scene
 
         private void HideOrderBubble()
         {
-            HideColaServeBubble();
             if (orderBubbleRoot != null)
             {
                 HudOverlayService.ReleaseWorldHudItem(orderBubbleRoot);
@@ -1476,10 +1478,15 @@ namespace JN.Client.Scene
             }
         }
 
+        private bool IsColaServeComplete()
+        {
+            return colaServedCount >= DataManager.VipColaServeCount;
+        }
+
         private void ShowColaServeBubble()
         {
             HideColaServeBubble();
-            if (colaServed || colaServing)
+            if (IsColaServeComplete() || colaServing)
             {
                 return;
             }
@@ -1543,7 +1550,7 @@ namespace JN.Client.Scene
 
         private void OnColaServeClicked()
         {
-            if (colaServed || colaServing)
+            if (IsColaServeComplete() || colaServing)
             {
                 return;
             }
@@ -1570,19 +1577,38 @@ namespace JN.Client.Scene
 
         private void FinishColaServeAfterVideo()
         {
-            if (colaServed)
+            if (!colaServing)
             {
                 return;
             }
 
             colaServing = false;
-            colaServed = true;
+            if (IsColaServeComplete())
+            {
+                return;
+            }
+
+            colaServedCount++;
             PersistSnapshot();
-            AwardColaServeReward();
-            if (isActiveAndEnabled)
+            AwardColaServeReward(colaServedCount);
+            if (!isActiveAndEnabled)
+            {
+                return;
+            }
+
+            if (IsColaServeComplete())
             {
                 StartCoroutine(ColaServeThanksRoutine());
+                return;
             }
+
+            StartCoroutine(ColaServeAskMoreRoutine());
+        }
+
+        private IEnumerator ColaServeAskMoreRoutine()
+        {
+            yield return ShowVipSpeechRoutine(VipColaAskMoreLine, VipSpeechBubbleSeconds);
+            ShowColaServeBubble();
         }
 
         private IEnumerator ColaServeThanksRoutine()
@@ -1590,7 +1616,7 @@ namespace JN.Client.Scene
             yield return ShowVipSpeechRoutine(VipTipThanksLine, VipSpeechBubbleSeconds);
         }
 
-        private static void AwardColaServeReward()
+        private static void AwardColaServeReward(int servedCount)
         {
             var dataManager = DataManager.Instance;
             if (dataManager == null)
@@ -1598,11 +1624,15 @@ namespace JN.Client.Scene
                 return;
             }
 
+            var price = DataManager.GetVipColaServePrice(servedCount - 1);
             var source = SecondFloorVipCoinCollectionPresenter.ResolveDefaultFlySource();
-            SecondFloorVipCoinCollectionPresenter.PlayInstant(
-                source,
-                SecondFloorVipCoinCollectionPresenter.Profile.TipCheckoutClick);
-            dataManager.ChangeCoinNum(DataManager.VipColaServeReward);
+            var profile = servedCount >= DataManager.VipColaServeCount
+                ? SecondFloorVipCoinCollectionPresenter.Profile.FinalCheckout
+                : servedCount >= 2
+                    ? SecondFloorVipCoinCollectionPresenter.Profile.TipCheckoutClick
+                    : SecondFloorVipCoinCollectionPresenter.Profile.PerDish;
+            SecondFloorVipCoinCollectionPresenter.PlayInstant(source, profile);
+            dataManager.ChangeCoinNum(price);
         }
 
         private void AwardFinalVipCheckout()

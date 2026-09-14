@@ -152481,6 +152481,22 @@ MonoBehaviour:
       ids: 0000000000000000
     - guid: 5e97eb03825dee720800000000000000
       ids: 0000000000000000
+  - guid: 9f3c1a7e6b254d8c9e0a2b4d6f8c1e30
+    type: 5
+    m_fileInfoHash: 1046856.png
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 1046856
+    m_assetChangeTS: 0
+    m_fileInfoReadTS: 1789377856
+    m_fileWriteTS: 1789376127
+    m_cachefileWriteTS: 1789376127
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 9f3c1a7e6b254d8c9e0a2b4d6f8c1e30
+      ids: 0000000000000000
   setting:
     alternateColor: 1
     excludeTypes: 0
