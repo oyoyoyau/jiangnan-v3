@@ -81,6 +81,17 @@ namespace JN.Client.UI
             });
         }
 
+        /// <summary>不走配表、直接播指定台词的对话（二楼贵客抱怨等）。</summary>
+        public static void ShowScriptedDialog(string[] lines, string headPicKey, Action onComplete = null)
+        {
+            OpenOrReplace<DialogPanelController>(new DialogPanelControllerData
+            {
+                ScriptedLines = lines,
+                ScriptedHeadPic = headPicKey,
+                OnComplete = onComplete
+            });
+        }
+
         /// <summary>
         /// 自家进店后延迟弹出引导对话（等 HUD 就绪）。
         /// </summary>
@@ -295,6 +306,19 @@ namespace JN.Client.UI
             {
                 VipMenu = vipMenu
             });
+        }
+
+        /// <summary>
+        /// 自家店贵客到店（自己进门或抢客卸下）时，顶部弹出「贵客临门」横幅。
+        /// </summary>
+        public static void ShowVipArrivalBanner()
+        {
+            if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
+            {
+                return;
+            }
+
+            OpenOrReplace<VipArrivalBannerPanelController>(new VipArrivalBannerPanelControllerData());
         }
 
         /// <summary>
@@ -539,7 +563,7 @@ namespace JN.Client.UI
                 new UpgradeTavernPopPanelControllerData
                 {
                     TavernLevel = Mathf.Max(1, tavernLevel),
-                    OnClosed = FlushPendingPeakTimeWarningAfterUpgradePop
+                    OnClosed = () => TryShowColaTradingUnlock(FlushPendingPeakTimeWarningAfterUpgradePop)
                 },
                 "UpgradeTavernPopPanel");
         }
@@ -598,6 +622,35 @@ namespace JN.Client.UI
             EndGameplayPauseForUpgradeCinematic();
             Scene.TavernSceneManager.Instance?.RefreshGuideWorldState();
             onFinished?.Invoke();
+            ActionKit.NextFrame(() => TryShowColaTradingUnlock()).StartGlobal();
+        }
+
+        /// <summary>
+        /// 三星回到店内后弹出可乐买卖解锁卡；未达三星或已点过接受则直接回调。
+        /// </summary>
+        public static void TryShowColaTradingUnlock(Action onClosed = null)
+        {
+            var dataManager = DataManager.Instance;
+            if (dataManager == null
+                || dataManager.IsVisitingOtherTavern
+                || dataManager.GetTavernLevel() < 3
+                || dataManager.IsColaTradingUnlocked())
+            {
+                onClosed?.Invoke();
+                return;
+            }
+
+            if (UIKit.GetPanel<VideoWindowController>() != null
+                || UIKit.GetPanel<UpgradeTavernPopPanelController>() != null
+                || UIKit.GetPanel<ColaUnlockPanelController>() != null)
+            {
+                return;
+            }
+
+            OpenOrReplace<ColaUnlockPanelController>(new ColaUnlockPanelControllerData
+            {
+                OnClosed = onClosed
+            });
         }
 
         private static string FormatLevelUpgradeVideoPath(int newTavernLevel)
@@ -754,6 +807,28 @@ namespace JN.Client.UI
         public static void ReleaseWorldHudItem(GameObject root)
         {
             EnsureWorldRuntimeHudPanel()?.ReleaseItem(root);
+        }
+
+        /// <summary>贵客头顶 5 星满意度（占位贴图，之后可换正式资源）。</summary>
+        public static void ShowVipSatisfactionStars(Transform target, int litCount, Vector3? worldOffset = null)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            var offset = worldOffset ?? new Vector3(0.2f, TavernWorldRuntimeHudLayout.CustomerWaitHeightOffset + 0.55f, 0f);
+            EnsureWorldRuntimeHudPanel()?.ShowVipSatisfactionStars(target, litCount, offset);
+        }
+
+        public static void SetVipSatisfactionStarCount(Transform target, int litCount)
+        {
+            EnsureWorldRuntimeHudPanel()?.SetVipSatisfactionStarCount(target, litCount);
+        }
+
+        public static void ReleaseVipSatisfactionStars(Transform target)
+        {
+            EnsureWorldRuntimeHudPanel()?.ReleaseVipSatisfactionStars(target);
         }
 
         /// <summary>

@@ -17,6 +17,12 @@ namespace JN.Client.UI
         /// <summary>对话组 Id（对应 Dialog.dialogId）。</summary>
         public string DialogId;
 
+        /// <summary>不走配表时的台词（优先于 DialogId）。</summary>
+        public string[] ScriptedLines;
+
+        /// <summary>脚本台词使用的立绘键，如 fushang。</summary>
+        public string ScriptedHeadPic;
+
         /// <summary>全部台词播完并关闭后回调。</summary>
         public Action OnComplete;
     }
@@ -32,8 +38,11 @@ namespace JN.Client.UI
         [SerializeField] private Button maskButton;
 
         private readonly List<Dialog> lines = new();
+        private readonly List<string> scriptedLines = new();
+        private string scriptedHeadPic;
         private int lineIndex;
         private bool completeInvoked;
+        private bool usingScriptedLines;
 
         protected override void OnPanelInit()
         {
@@ -48,17 +57,34 @@ namespace JN.Client.UI
             completeInvoked = false;
             lineIndex = 0;
             lines.Clear();
+            scriptedLines.Clear();
+            usingScriptedLines = false;
+            scriptedHeadPic = data != null ? data.ScriptedHeadPic : null;
 
-            var dialogId = data != null ? data.DialogId : null;
-            var loaded = DialogConfigUtility.GetLines(dialogId);
-            if (loaded != null && loaded.Count > 0)
+            if (data?.ScriptedLines != null && data.ScriptedLines.Length > 0)
             {
-                lines.AddRange(loaded);
+                usingScriptedLines = true;
+                for (var i = 0; i < data.ScriptedLines.Length; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(data.ScriptedLines[i]))
+                    {
+                        scriptedLines.Add(data.ScriptedLines[i]);
+                    }
+                }
+            }
+            else
+            {
+                var dialogId = data != null ? data.DialogId : null;
+                var loaded = DialogConfigUtility.GetLines(dialogId);
+                if (loaded != null && loaded.Count > 0)
+                {
+                    lines.AddRange(loaded);
+                }
             }
 
-            if (lines.Count == 0)
+            if ((usingScriptedLines && scriptedLines.Count == 0) || (!usingScriptedLines && lines.Count == 0))
             {
-                Debug.LogWarning($"[DialogPanel] 对话组为空或不存在：{dialogId}");
+                Debug.LogWarning($"[DialogPanel] 对话组为空或不存在：{data?.DialogId}");
                 CloseSelf();
                 return;
             }
@@ -75,6 +101,7 @@ namespace JN.Client.UI
         {
             InvokeCompleteOnce();
             lines.Clear();
+            scriptedLines.Clear();
             lineIndex = 0;
         }
 
@@ -86,13 +113,14 @@ namespace JN.Client.UI
 
         private void OnClickBg()
         {
-            if (lines.Count <= 0)
+            var count = usingScriptedLines ? scriptedLines.Count : lines.Count;
+            if (count <= 0)
             {
                 CloseSelf();
                 return;
             }
 
-            if (lineIndex >= lines.Count - 1)
+            if (lineIndex >= count - 1)
             {
                 CloseSelf();
                 return;
@@ -104,6 +132,23 @@ namespace JN.Client.UI
 
         private void ShowCurrentLine()
         {
+            if (usingScriptedLines)
+            {
+                if (lineIndex < 0 || lineIndex >= scriptedLines.Count)
+                {
+                    return;
+                }
+
+                if (contentText != null)
+                {
+                    contentText.text = scriptedLines[lineIndex];
+                    contentText.raycastTarget = false;
+                }
+
+                ApplyHeadPic(scriptedHeadPic);
+                return;
+            }
+
             if (lineIndex < 0 || lineIndex >= lines.Count)
             {
                 return;

@@ -84,6 +84,7 @@ namespace JN.Client.UI
         private readonly List<TavernWorldRuntimeHudItemView> activeItems = new();
         private readonly List<TavernWorldWaitHudItemView> activeWaitItems = new();
         private readonly List<WorldFollowOrderButtonView> activeOrderButtons = new();
+        private readonly List<WorldFollowVipSatisfactionStarsView> activeSatisfactionStars = new();
         private readonly List<VipGuestActionView> activeVipGuestActions = new();
         private readonly List<TavernReviewTipsView> activeReviewTips = new();
         private readonly Dictionary<int, TavernDrumUpTipsView> activePulledTips = new();
@@ -116,6 +117,7 @@ namespace JN.Client.UI
         {
             ClearAllItems();
             ClearAllOrderButtons();
+            ClearAllSatisfactionStars();
             ClearAllVipGuestActions();
             ClearAllReviewTips();
             ClearAllPulledTips();
@@ -194,6 +196,7 @@ namespace JN.Client.UI
             RefreshInteriorWallExpandItem();
             RefreshEmployActionItems();
             RefreshOrderButtonItems();
+            RefreshSatisfactionStarItems();
             RefreshMyDrumUpButtonItem();
             RefreshVipGuestActionItems();
             RefreshReviewTipItems();
@@ -720,6 +723,70 @@ namespace JN.Client.UI
             return item.gameObject;
         }
 
+        /// <summary>贵客头顶满意度星星（跟随世界坐标）。</summary>
+        public WorldFollowVipSatisfactionStarsView ShowVipSatisfactionStars(Transform target, int litCount, Vector3 worldOffset)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            ReleaseVipSatisfactionStars(target);
+            EnsureContentRoot();
+            if (ContentRoot == null)
+            {
+                return null;
+            }
+
+            var wrapperObject = new GameObject("VipSatisfactionStars", typeof(RectTransform));
+            wrapperObject.transform.SetParent(ContentRoot, false);
+            var item = wrapperObject.AddComponent<WorldFollowVipSatisfactionStarsView>();
+            item.Initialize();
+            item.BindTarget(target, worldOffset);
+            item.SetLitCount(litCount);
+            activeSatisfactionStars.Add(item);
+            return item;
+        }
+
+        public void SetVipSatisfactionStarCount(Transform target, int litCount)
+        {
+            for (var index = 0; index < activeSatisfactionStars.Count; index++)
+            {
+                var item = activeSatisfactionStars[index];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (target != null && item.FollowTarget != null && item.FollowTarget != target)
+                {
+                    continue;
+                }
+
+                item.SetLitCount(litCount);
+            }
+        }
+
+        public void ReleaseVipSatisfactionStars(Transform target)
+        {
+            for (var index = activeSatisfactionStars.Count - 1; index >= 0; index--)
+            {
+                var item = activeSatisfactionStars[index];
+                if (item == null)
+                {
+                    activeSatisfactionStars.RemoveAt(index);
+                    continue;
+                }
+
+                if (target != null && item.FollowTarget != null && item.FollowTarget != target)
+                {
+                    continue;
+                }
+
+                RemoveSatisfactionStarsAt(index);
+            }
+        }
+
         /// <summary>
         /// 创建可点击的状态图标条目。
         /// </summary>
@@ -1027,6 +1094,24 @@ namespace JN.Client.UI
                 return;
             }
 
+            for (var index = activeSatisfactionStars.Count - 1; index >= 0; index--)
+            {
+                var item = activeSatisfactionStars[index];
+                if (item == null)
+                {
+                    activeSatisfactionStars.RemoveAt(index);
+                    continue;
+                }
+
+                if (item.gameObject != root)
+                {
+                    continue;
+                }
+
+                RemoveSatisfactionStarsAt(index);
+                return;
+            }
+
             for (var index = activeVipGuestActions.Count - 1; index >= 0; index--)
             {
                 var item = activeVipGuestActions[index];
@@ -1175,6 +1260,35 @@ namespace JN.Client.UI
             }
         }
 
+        private void RemoveSatisfactionStarsAt(int index)
+        {
+            var item = activeSatisfactionStars[index];
+            activeSatisfactionStars.RemoveAt(index);
+            if (item != null)
+            {
+                Destroy(item.gameObject);
+            }
+        }
+
+        private void RefreshSatisfactionStarItems()
+        {
+            for (var index = activeSatisfactionStars.Count - 1; index >= 0; index--)
+            {
+                var item = activeSatisfactionStars[index];
+                if (item == null)
+                {
+                    activeSatisfactionStars.RemoveAt(index);
+                    continue;
+                }
+
+                RefreshAnchoredItem(
+                    item,
+                    item.GetWorldAnchorPosition(),
+                    (view, position) => view.SetAnchoredPosition(position),
+                    (view, visible) => view.SetVisible(visible));
+            }
+        }
+
         private void ClearAllOrderButtons()
         {
             foreach (var item in activeOrderButtons)
@@ -1186,6 +1300,14 @@ namespace JN.Client.UI
             }
 
             activeOrderButtons.Clear();
+        }
+
+        private void ClearAllSatisfactionStars()
+        {
+            for (var index = activeSatisfactionStars.Count - 1; index >= 0; index--)
+            {
+                RemoveSatisfactionStarsAt(index);
+            }
         }
 
         /// <summary>

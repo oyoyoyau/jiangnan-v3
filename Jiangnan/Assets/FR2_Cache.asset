@@ -152497,6 +152497,90 @@ MonoBehaviour:
     UseGUIDsList:
     - guid: 9f3c1a7e6b254d8c9e0a2b4d6f8c1e30
       ids: 0000000000000000
+  - guid: 6a8b0c2d4e5f7a9b1c3d5e7f9a0b2c4d
+    type: 5
+    m_fileInfoHash: 318061.png
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 318061
+    m_assetChangeTS: 0
+    m_fileInfoReadTS: 1789465184
+    m_fileWriteTS: 1789464957
+    m_cachefileWriteTS: 1789464957
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 6a8b0c2d4e5f7a9b1c3d5e7f9a0b2c4d
+      ids: 0000000000000000
+  - guid: 7c9e1b3d5f6a8c0e2d4f6a8b0c1e3d5f
+    type: 5
+    m_fileInfoHash: 3133.prefab
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 3133
+    m_assetChangeTS: 1789465543
+    m_fileInfoReadTS: 1789466538
+    m_fileWriteTS: 1789465218
+    m_cachefileWriteTS: 1789465218
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 3e8a1c5b7d924f6e8a0b2c4d6e8f1a30
+      ids: e079af0000000000
+    - guid: fe87c0e1cc204ed48ad3b37840f39efc
+      ids: e079af0000000000
+    - guid: 6a8b0c2d4e5f7a9b1c3d5e7f9a0b2c4d
+      ids: 2003450100000000
+  - guid: 1c4e7a9b2d5f8e0a3c6b9d2e5f8a1c4e
+    type: 5
+    m_fileInfoHash: 95807.jpg
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 95807
+    m_assetChangeTS: 0
+    m_fileInfoReadTS: 1789466538
+    m_fileWriteTS: 1789466226
+    m_cachefileWriteTS: 1789466226
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 1c4e7a9b2d5f8e0a3c6b9d2e5f8a1c4e
+      ids: 0000000000000000
+  - guid: 2d5f8a1c4e7b0d3f6a9c2e5b8d1f4a7c
+    type: 5
+    m_fileInfoHash: 118569.png
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 118569
+    m_assetChangeTS: 0
+    m_fileInfoReadTS: 1789466538
+    m_fileWriteTS: 1789466254
+    m_cachefileWriteTS: 1789466254
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 2d5f8a1c4e7b0d3f6a9c2e5b8d1f4a7c
+      ids: 0000000000000000
+  - guid: 5f9e1b3d5f6a8c0e2d4f6a8b0c1e3d60
+    type: 5
+    m_fileInfoHash: 1896.prefab
+    m_assetbundle: 
+    m_addressable: 
+    m_atlas: 
+    m_fileSize: 1896
+    m_assetChangeTS: 0
+    m_fileInfoReadTS: 1789466538
+    m_fileWriteTS: 1789466264
+    m_cachefileWriteTS: 1789466264
+    m_forceIncludeInBuild: 0
+    refreshStamp: 2
+    UseGUIDsList:
+    - guid: 4e8a1c5b7d924f6e8a0b2c4d6e8f1a41
+      ids: e079af0000000000
   setting:
     alternateColor: 1
     excludeTypes: 0

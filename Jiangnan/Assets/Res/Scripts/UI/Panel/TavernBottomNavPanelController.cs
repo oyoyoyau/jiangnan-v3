@@ -112,6 +112,7 @@ namespace JN.Client.UI
             TryRevealPendingFeatureEntries();
             RefreshPanel();
             transform.SetAsLastSibling();
+            HudOverlayService.TryShowColaTradingUnlock();
         }
 
         private static void TryRevealPendingFeatureEntries()
@@ -618,7 +619,7 @@ namespace JN.Client.UI
         }
 
         /// <summary>
-        /// 可乐入口：与升级同显隐（自家店、非二楼下楼模式）；右上角库存，下方价格 100。
+        /// 可乐入口：三星解锁拍脸点「接受」后，自家店一楼显示；右上角库存，下方价格 100。
         /// </summary>
         private void RefreshColaEntry()
         {
@@ -629,8 +630,7 @@ namespace JN.Client.UI
             }
 
             var dataManager = DataManager.Instance;
-            var visiting = dataManager != null && dataManager.IsVisitingOtherTavern;
-            var show = !visiting;
+            var show = dataManager != null && dataManager.ShouldShowColaEntry();
             SetNavButtonVisible(colaButton, show);
             if (!show)
             {
@@ -1636,13 +1636,8 @@ namespace JN.Client.UI
 
         private void OnClickColaButton()
         {
-            if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
-            {
-                return;
-            }
-
             var dataManager = DataManager.Instance;
-            if (dataManager == null)
+            if (dataManager == null || !dataManager.ShouldShowColaEntry())
             {
                 return;
             }

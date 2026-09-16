@@ -116,7 +116,7 @@ namespace JN.Client.Model
         /// <summary>本轮二楼贵客是否已上完可乐（三次）。兼容旧档。</summary>
         public bool secondFloorVipColaServed;
 
-        /// <summary>本轮二楼贵客已上可乐次数（0~3）。</summary>
+        /// <summary>本轮二楼贵客已上可乐次数（0~2）。</summary>
         public int secondFloorVipColaServedCount;
 
         /// <summary>
@@ -131,6 +131,9 @@ namespace JN.Client.Model
 
         /// <summary>店内可乐库存（底栏购买，贵客点头顶可乐消耗）。</summary>
         public int colaStock;
+
+        /// <summary>三星后点过可乐解锁「接受」，底栏才显示买可乐。</summary>
+        public bool colaTradingUnlocked;
     }
 
     /// <summary>

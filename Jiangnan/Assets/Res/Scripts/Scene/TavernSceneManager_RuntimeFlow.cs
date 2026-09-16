@@ -1885,7 +1885,14 @@ namespace JN.Client.Scene
 
             EnqueueSpawnedCustomer(runtimeController);
             ShowVipGuestActionBubble(runtimeController);
+            NotifyOwnShopVipGuestArrived();
             return true;
+        }
+
+        /// <summary>自家店新到贵客：顶部「贵客临门」横幅。拜访他人店不弹。</summary>
+        private static void NotifyOwnShopVipGuestArrived()
+        {
+            HudOverlayService.ShowVipArrivalBanner();
         }
 
         /// <summary>

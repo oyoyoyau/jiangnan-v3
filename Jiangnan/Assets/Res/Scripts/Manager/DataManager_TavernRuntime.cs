@@ -379,10 +379,10 @@ namespace JN.Client.Manager
         public const int ColaBuyPrice = 100;
 
         /// <summary>每位贵客最多上可乐次数。</summary>
-        public const int VipColaServeCount = 3;
+        public const int VipColaServeCount = 2;
 
-        /// <summary>二楼上可乐卖出价：第 1/2/3 次。</summary>
-        public static readonly int[] VipColaServePrices = { 188, 888, 1888 };
+        /// <summary>二楼上可乐卖出价：第一瓶 188，加买第二瓶更多。</summary>
+        public static readonly int[] VipColaServePrices = { 188, 1888 };
 
         /// <summary>第 serveIndex 次上可乐的卖出价（0 起）。</summary>
         public static int GetVipColaServePrice(int serveIndex)
@@ -403,6 +403,34 @@ namespace JN.Client.Manager
             return Mathf.Max(0, SaveData.tavern.colaStock);
         }
 
+        /// <summary>是否已确认解锁可乐买卖（三星拍脸点过接受）。</summary>
+        public bool IsColaTradingUnlocked()
+        {
+            EnsureTavernDefaults();
+            return SaveData.tavern.colaTradingUnlocked;
+        }
+
+        /// <summary>自家店一楼底栏是否显示买可乐入口。</summary>
+        public bool ShouldShowColaEntry()
+        {
+            return !IsVisitingOtherTavern && IsColaTradingUnlocked();
+        }
+
+        /// <summary>点解锁卡「接受」后开放底栏买可乐。</summary>
+        public void UnlockColaTrading()
+        {
+            EnsureTavernDefaults();
+            if (SaveData.tavern.colaTradingUnlocked)
+            {
+                Signals.Get<TavernRuntimeChangedSignal>().Dispatch();
+                return;
+            }
+
+            SaveData.tavern.colaTradingUnlocked = true;
+            SaveGame();
+            Signals.Get<TavernRuntimeChangedSignal>().Dispatch();
+        }
+
         /// <summary>
         /// 花费 100 铜钱买入一杯可乐（可囤货）。拜访他人店不可买。
         /// </summary>
@@ -413,6 +441,12 @@ namespace JN.Client.Manager
             if (IsVisitingOtherTavern)
             {
                 message = "拜访中无法购买可乐";
+                return false;
+            }
+
+            if (!IsColaTradingUnlocked())
+            {
+                message = "尚未解锁可乐买卖";
                 return false;
             }
 

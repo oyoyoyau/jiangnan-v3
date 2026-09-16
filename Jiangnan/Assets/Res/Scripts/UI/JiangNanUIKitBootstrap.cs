@@ -72,6 +72,8 @@ namespace JN.Client.UI
             { typeof(RuntimeInfoPanelController), UILevel.PopUI },
             { typeof(FloatingWarningPanelController), UILevel.PopUI },
             { typeof(PeakTimeWarningPanelController), UILevel.PopUI },
+            { typeof(VipArrivalBannerPanelController), UILevel.PopUI },
+            { typeof(ColaUnlockPanelController), UILevel.PopUI },
             { typeof(SwitchMenuTipsPanelController), UILevel.PopUI },
             { typeof(RecruitListPanelController), UILevel.PopUI },
             { typeof(RecruitConfirmPanelController), UILevel.PopUI },

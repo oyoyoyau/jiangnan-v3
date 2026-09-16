@@ -655,6 +655,7 @@ namespace JN.Client.Scene
                 customer.SetAwaitingVipFloorChoice(true);
                 customer.MoveToQueue(GetQueueTarget(Mathf.Max(0, queuedCustomers.Count)));
                 ShowVipGuestActionBubble(customer);
+                NotifyOwnShopVipGuestArrived();
             }
             else
             {

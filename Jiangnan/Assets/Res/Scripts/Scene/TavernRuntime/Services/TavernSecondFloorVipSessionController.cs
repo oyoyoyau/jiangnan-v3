@@ -12,10 +12,8 @@ using UnityEngine.Video;
 namespace JN.Client.Scene
 {
     /// <summary>
-    /// 二楼贵客包厢会话：入座先说话再点单；贵客菜单每批 2 道（一做一上），
-    /// 两道一起吃完后播一次飞钱与评价气泡，再点下一批，共 6 道后结账；
-    /// 中途切大众菜单点单则差评离店；开局即大众菜单仍吃一道后差评离店。
-    /// 支持存档快照续跑。
+    /// 二楼贵客包厢会话（自家店写死）：坐下后上家常菜 → 两星差评对话 → 上可乐播视频五星
+    /// → 再来一瓶高价金子连点 → 离店。拜访他人店仍走原菜单分支。
     /// </summary>
     public sealed class TavernSecondFloorVipSessionController : MonoBehaviour
     {
@@ -23,6 +21,7 @@ namespace JN.Client.Scene
         /// <summary>贵客菜单每次点单对应的菜品数：厨师一次做、小二一次上。</summary>
         private const int VipMenuDishesPerOrder = 2;
         private const string CheckoutCoinIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/checkout.png";
+        private const string TableGoldIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/coin.png";
         private const string PopularMenuOrderIconPath = "Assets/Res/Resources/Textures/UI/Icons/menu1.png";
         private const string VipMenuOrderIconPath = "Assets/Res/Resources/Textures/UI/Icons/menu2.png";
         private const string ColaServeIconPath = "Assets/Res/Resources/Textures/UI/Icons 1/vip_Cola.png";
@@ -38,9 +37,23 @@ namespace JN.Client.Scene
         private const string VipSitOrderLine = "把最好的端上来";
         private const string VipTipThanksLine = "我很满意，给你小费";
         private const string VipColaAskMoreLine = "不够，再来一瓶！";
+        private const string VipColaHappyMoreLine = "痛快！太过瘾了！";
+        private const int ColaTableGoldFirstClickMin = 4;
+        private const int ColaTableGoldFirstClickMax = 5;
+        private const int ColaTableGoldMoreClickMin = 10;
+        private const int ColaTableGoldMoreClickMax = 12;
+        /// <summary>可乐赏金堆在桌面，不要跟贵客头顶结账同一高度。</summary>
+        private static readonly Vector3 ColaTableGoldOffset = new(0f, 0.35f, 0f);
         private const string VipMenuFarewellLine = "今日尽兴，改日再来";
+        private const string HomeStyleOrderCaption = "上家常菜";
+        private const string VipComplaintHeadPic = "fushang";
         private const string PopularMenuFirstComplaintLine = "都是些粗茶淡饭";
         private const string PopularMenuSecondComplaintLine = "饭菜欠妥浅尝即可";
+        private static readonly string[] HomeStyleComplaintDialogLines =
+        {
+            "这菜味道寡淡，平平无奇。",
+            "简直是浪费我的时间！"
+        };
         private static readonly string[] VipMenuDishPraiseLines =
         {
             "嗯！这味儿地道！",
@@ -88,9 +101,15 @@ namespace JN.Client.Scene
         private GameObject checkoutBubbleRoot;
         private GameObject orderBubbleRoot;
         private GameObject colaServeBubbleRoot;
+        private GameObject colaTableGoldRoot;
         private bool orderClicked;
         private int colaServedCount;
         private bool colaServing;
+        private bool colaSequenceBusy;
+        private bool colaOfferUnlocked;
+        private bool colaCollectingTableGold;
+        private int colaTableGoldClickIndex;
+        private int[] colaTableGoldPayouts;
         private bool sessionRunning;
         private bool vipSeated;
         private bool vipSessionEndedByPopularSwitch;
@@ -153,14 +172,18 @@ namespace JN.Client.Scene
             }
 
             StopAllSessionCoroutines();
+            FlushRemainingColaTableGold();
             HideCheckoutBubble();
             HideOrderBubble();
             HideColaServeBubble();
+            HideColaTableGoldBubble();
             if (colaServing)
             {
                 VideoWindowController.HideActiveWindow();
                 colaServing = false;
             }
+
+            colaSequenceBusy = false;
             ReleaseVipReviewTip();
             ClearWaiterCarryPlate();
             ClearAllStagedKitchenDishes();
@@ -252,6 +275,9 @@ namespace JN.Client.Scene
             HideCheckoutBubble();
             HideOrderBubble();
             HideColaServeBubble();
+            FlushRemainingColaTableGold();
+            HideColaTableGoldBubble();
+            HideVipSatisfactionStars();
             if (colaServing)
             {
                 VideoWindowController.HideActiveWindow();
@@ -362,9 +388,23 @@ namespace JN.Client.Scene
             yield return EnterVipAndSitRoutine();
             vipSeated = true;
             PersistSnapshot();
-            ShowColaServeBubble();
 
-            // 第一道批：入座说话后出点单；贵客菜单按每批两道循环，大众菜单保持原点单后差评离店。
+            if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
+            {
+                yield return VisitShopVipSessionRoutine();
+            }
+            else
+            {
+                yield return HardcodedHomeStyleColaSessionRoutine();
+            }
+
+            sessionRoutine = null;
+            sessionRunning = false;
+        }
+
+        /// <summary>拜访他人店：仍按原菜单点单/差评或贵客菜单流程。</summary>
+        private IEnumerator VisitShopVipSessionRoutine()
+        {
             var needsFirstOrder = !servedFlags[0] && eatenCount <= 0;
             if (needsFirstOrder)
             {
@@ -377,8 +417,6 @@ namespace JN.Client.Scene
             {
                 yield return ServeFirstDishRoutine();
                 yield return PopularMenuDissatisfiedLeaveRoutine();
-                sessionRoutine = null;
-                sessionRunning = false;
                 yield break;
             }
 
@@ -387,9 +425,75 @@ namespace JN.Client.Scene
             {
                 yield return FinishSessionRoutine();
             }
+        }
 
-            sessionRoutine = null;
-            sessionRunning = false;
+        /// <summary>
+        /// 自家店写死：上家常菜 → 两星 + 抱怨对话 → 上可乐视频五星 → 再来一瓶金子 → 离店。
+        /// </summary>
+        private IEnumerator HardcodedHomeStyleColaSessionRoutine()
+        {
+            var needsHomeStyleServe = !servedFlags[0] && eatenCount <= 0;
+            if (needsHomeStyleServe)
+            {
+                yield return AwaitPlayerOrderRoutine();
+                yield return ServeFirstDishRoutine();
+            }
+
+            if (eatenCount < 1 && servedFlags[0])
+            {
+                yield return DineRoutine(0);
+            }
+
+            if (!IsColaServeComplete())
+            {
+                ShowVipSatisfactionStars(colaServedCount > 0 ? 5 : 2);
+                if (colaServedCount <= 0)
+                {
+                    yield return AwaitHomeStyleComplaintDialogRoutine();
+                }
+
+                colaOfferUnlocked = true;
+                yield return AwaitColaServeCompleteRoutine();
+            }
+
+            HideVipSatisfactionStars();
+            yield return LeaveAndCleanupRoutine();
+        }
+
+        private IEnumerator AwaitHomeStyleComplaintDialogRoutine()
+        {
+            var done = false;
+            HudOverlayService.ShowScriptedDialog(
+                HomeStyleComplaintDialogLines,
+                VipComplaintHeadPic,
+                () => done = true);
+            while (!done)
+            {
+                yield return null;
+            }
+        }
+
+        private void ShowVipSatisfactionStars(int litCount)
+        {
+            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
+            if (vip == null)
+            {
+                return;
+            }
+
+            HudOverlayService.ShowVipSatisfactionStars(vip.transform, litCount);
+        }
+
+        private void SetVipSatisfactionStars(int litCount)
+        {
+            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
+            HudOverlayService.SetVipSatisfactionStarCount(vip != null ? vip.transform : null, litCount);
+        }
+
+        private void HideVipSatisfactionStars()
+        {
+            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
+            HudOverlayService.ReleaseVipSatisfactionStars(vip != null ? vip.transform : null);
         }
 
         /// <summary>大众菜单：点单后做第一道、按表用餐并差评离店（点单已在入座后完成）。</summary>
@@ -775,7 +879,43 @@ namespace JN.Client.Scene
             }
 
             HideOrderBubble();
+        }
+
+        /// <summary>可乐整段结束前不上菜；拜访中或已上完则跳过。</summary>
+        private IEnumerator AwaitColaServeCompleteRoutine()
+        {
+            var dataManager = DataManager.Instance;
+            if (dataManager != null && dataManager.IsVisitingOtherTavern)
+            {
+                yield break;
+            }
+
+            if (IsColaServeComplete())
+            {
+                yield break;
+            }
+
+            HideTableHudExceptColaOrGold();
             ShowColaServeBubble();
+            while (!IsColaFlowFullyFinished())
+            {
+                if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
+                {
+                    break;
+                }
+
+                yield return null;
+            }
+
+            HideColaServeBubble();
+        }
+
+        private bool IsColaFlowFullyFinished()
+        {
+            return IsColaServeComplete()
+                   && !colaSequenceBusy
+                   && !colaServing
+                   && !colaCollectingTableGold;
         }
 
         private IEnumerator ShowVipSpeechRoutine(string line, float seconds)
@@ -1246,6 +1386,8 @@ namespace JN.Client.Scene
         {
             HideOrderBubble();
             HideColaServeBubble();
+            FlushRemainingColaTableGold();
+            HideColaTableGoldBubble();
             if (tipCheckoutClickCount < TipCheckoutClickCount)
             {
                 if (tipCheckoutClickCount <= 0)
@@ -1290,9 +1432,12 @@ namespace JN.Client.Scene
 
         private IEnumerator LeaveAndCleanupRoutine()
         {
+            FlushRemainingColaTableGold();
             HideCheckoutBubble();
             HideOrderBubble();
             HideColaServeBubble();
+            HideColaTableGoldBubble();
+            HideVipSatisfactionStars();
             if (colaServing)
             {
                 VideoWindowController.HideActiveWindow();
@@ -1368,6 +1513,10 @@ namespace JN.Client.Scene
         private void ShowCheckoutBubble()
         {
             HideCheckoutBubble();
+            if (IsColaProcessBlockingDishes())
+            {
+                return;
+            }
             var vip = TavernSecondFloorVipService.SpawnedVipRoot;
             var target = vip != null ? vip.transform : (productPlacements.Count > 0 ? productPlacements[0] : null);
             if (target == null)
@@ -1415,6 +1564,11 @@ namespace JN.Client.Scene
         private void ShowOrderBubble()
         {
             HideOrderBubble();
+            if (IsColaProcessBlockingDishes())
+            {
+                return;
+            }
+
             var vip = TavernSecondFloorVipService.SpawnedVipRoot;
             var target = vip != null ? vip.transform : (productPlacements.Count > 0 ? productPlacements[0] : null);
             if (target == null)
@@ -1423,7 +1577,7 @@ namespace JN.Client.Scene
                 return;
             }
 
-            var icon = LoadOrderBubbleIcon(IsVipMenuSelected());
+            var icon = LoadOrderBubbleIcon(!ShouldUseHomeStyleOrderVisual() && IsVipMenuSelected());
             orderBubbleRoot = HudOverlayService.ShowFoodTableServeBubble(
                 target,
                 icon,
@@ -1436,19 +1590,25 @@ namespace JN.Client.Scene
             }
 
             ApplyOrderBubbleMenuVisuals();
-            ShowColaServeBubble();
         }
 
         private void ApplyOrderBubbleMenuVisuals()
         {
+            if (IsColaProcessBlockingDishes())
+            {
+                HideOrderBubble();
+                return;
+            }
+
             if (orderBubbleRoot == null)
             {
                 return;
             }
 
-            var vipMenu = IsVipMenuSelected();
+            var homeStyle = ShouldUseHomeStyleOrderVisual();
+            var vipMenu = !homeStyle && IsVipMenuSelected();
             var icon = LoadOrderBubbleIcon(vipMenu);
-            var caption = vipMenu ? "上招牌菜" : "上大众菜";
+            var caption = homeStyle ? HomeStyleOrderCaption : (vipMenu ? "上招牌菜" : "上大众菜");
             var followView = orderBubbleRoot.GetComponent<WorldFollowOrderButtonView>()
                              ?? orderBubbleRoot.GetComponentInChildren<WorldFollowOrderButtonView>(true);
             if (followView != null)
@@ -1461,6 +1621,11 @@ namespace JN.Client.Scene
             var orderButton = orderBubbleRoot.GetComponentInChildren<TableOrderButtonUI>(true);
             orderButton?.ApplyMenuOrderVisual(icon, caption);
             orderButton?.SetBreathingEnabled(vipMenu);
+        }
+
+        private static bool ShouldUseHomeStyleOrderVisual()
+        {
+            return DataManager.Instance == null || !DataManager.Instance.IsVisitingOtherTavern;
         }
 
         private static Sprite LoadOrderBubbleIcon(bool vipMenu)
@@ -1483,10 +1648,36 @@ namespace JN.Client.Scene
             return colaServedCount >= DataManager.VipColaServeCount;
         }
 
+        private bool IsColaProcessBlockingDishes()
+        {
+            if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
+            {
+                return false;
+            }
+
+            return colaOfferUnlocked
+                   && (!IsColaServeComplete()
+                       || colaSequenceBusy
+                       || colaServing
+                       || colaCollectingTableGold);
+        }
+
+        private void HideTableHudExceptColaOrGold()
+        {
+            HideOrderBubble();
+            HideCheckoutBubble();
+            if (colaCollectingTableGold || colaServing)
+            {
+                HideColaServeBubble();
+            }
+        }
+
         private void ShowColaServeBubble()
         {
             HideColaServeBubble();
-            if (IsColaServeComplete() || colaServing)
+            HideOrderBubble();
+            HideCheckoutBubble();
+            if (IsColaServeComplete() || colaServing || colaCollectingTableGold)
             {
                 return;
             }
@@ -1563,16 +1754,24 @@ namespace JN.Client.Scene
             }
 
             colaServing = true;
+            colaSequenceBusy = true;
             HideColaServeBubble();
-            var clip = GameplayResourceStore.LoadAsset<VideoClip>(ColaServeVideoPath);
-            if (clip == null)
+            // 只有第一瓶播反应视频；加买第二瓶只表现开心和加钱。
+            if (colaServedCount <= 0)
             {
-                Debug.LogWarning($"[SecondFloorVipSession] 缺少可乐视频：{ColaServeVideoPath}");
-                FinishColaServeAfterVideo();
+                var clip = GameplayResourceStore.LoadAsset<VideoClip>(ColaServeVideoPath);
+                if (clip == null)
+                {
+                    Debug.LogWarning($"[SecondFloorVipSession] 缺少可乐视频：{ColaServeVideoPath}");
+                    FinishColaServeAfterVideo();
+                    return;
+                }
+
+                VideoWindowController.Show(clip, FinishColaServeAfterVideo, pauseOnLastFrame: false);
                 return;
             }
 
-            VideoWindowController.Show(clip, FinishColaServeAfterVideo, pauseOnLastFrame: false);
+            FinishColaServeAfterVideo();
         }
 
         private void FinishColaServeAfterVideo()
@@ -1585,35 +1784,279 @@ namespace JN.Client.Scene
             colaServing = false;
             if (IsColaServeComplete())
             {
+                colaSequenceBusy = false;
                 return;
             }
 
             colaServedCount++;
             PersistSnapshot();
-            AwardColaServeReward(colaServedCount);
             if (!isActiveAndEnabled)
             {
+                AwardColaServeReward(colaServedCount);
+                colaSequenceBusy = false;
                 return;
             }
 
-            if (IsColaServeComplete())
+            StartCoroutine(ColaTableGoldThenContinueRoutine(colaServedCount));
+        }
+
+        private IEnumerator ColaTableGoldThenContinueRoutine(int servedCount)
+        {
+            try
             {
-                StartCoroutine(ColaServeThanksRoutine());
+                if (servedCount == 1)
+                {
+                    SetVipSatisfactionStars(5);
+                    GameAudioManager.PlayVipSatisfied();
+                }
+
+                if (servedCount >= DataManager.VipColaServeCount)
+                {
+                    GameAudioManager.PlayVipSatisfied();
+                    yield return ShowVipSpeechRoutine(VipColaHappyMoreLine, VipSpeechBubbleSeconds);
+                }
+
+                yield return AwaitColaTableGoldSpamRoutine(servedCount);
+                if (!isActiveAndEnabled)
+                {
+                    yield break;
+                }
+
+                if (IsColaServeComplete())
+                {
+                    yield break;
+                }
+
+                yield return ColaServeAskMoreRoutine();
+            }
+            finally
+            {
+                colaSequenceBusy = false;
+            }
+        }
+
+        private IEnumerator AwaitColaTableGoldSpamRoutine(int servedCount)
+        {
+            var price = DataManager.GetVipColaServePrice(servedCount - 1);
+            var clicks = ResolveColaTableGoldClickCount(servedCount);
+            colaTableGoldPayouts = SplitEscalatingPayouts(price, clicks);
+            colaTableGoldClickIndex = 0;
+            colaCollectingTableGold = true;
+            if (!ShowColaTableGoldBubble())
+            {
+                AwardColaServeReward(servedCount);
+                colaCollectingTableGold = false;
+                colaTableGoldPayouts = null;
+                yield break;
+            }
+
+            while (colaCollectingTableGold && colaTableGoldClickIndex < colaTableGoldPayouts.Length)
+            {
+                yield return null;
+            }
+
+            HideColaTableGoldBubble();
+            colaCollectingTableGold = false;
+            colaTableGoldPayouts = null;
+        }
+
+        private bool ShowColaTableGoldBubble()
+        {
+            HideColaTableGoldBubble();
+            HideOrderBubble();
+            HideColaServeBubble();
+            HideCheckoutBubble();
+            var target = ResolveColaTableGoldAnchor();
+            if (target == null)
+            {
+                return false;
+            }
+
+            var icon = GameplayResourceStore.LoadAsset<Sprite>(TableGoldIconPath)
+                       ?? GameplayResourceStore.LoadAsset<Sprite>(CheckoutCoinIconPath);
+            colaTableGoldRoot = HudOverlayService.ShowFoodTableServeBubble(
+                target,
+                icon,
+                HandleColaTableGoldClick,
+                ColaTableGoldOffset + ResolveColaTableGoldCenterOffset(target));
+            if (colaTableGoldRoot == null)
+            {
+                return false;
+            }
+
+            RefreshColaTableGoldCaption();
+            var followView = colaTableGoldRoot.GetComponent<WorldFollowOrderButtonView>()
+                             ?? colaTableGoldRoot.GetComponentInChildren<WorldFollowOrderButtonView>(true);
+            followView?.SetBreathingEnabled(true);
+            return true;
+        }
+
+        private void HideColaTableGoldBubble()
+        {
+            if (colaTableGoldRoot == null)
+            {
                 return;
             }
 
-            StartCoroutine(ColaServeAskMoreRoutine());
+            HudOverlayService.ReleaseWorldHudItem(colaTableGoldRoot);
+            colaTableGoldRoot = null;
+        }
+
+        private Transform ResolveColaTableGoldAnchor()
+        {
+            if (productPlacements.Count > 0 && productPlacements[0] != null)
+            {
+                return productPlacements[0];
+            }
+
+            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
+            return vip != null ? vip.transform : null;
+        }
+
+        private Vector3 ResolveColaTableGoldCenterOffset(Transform anchor)
+        {
+            if (anchor == null || productPlacements.Count == 0)
+            {
+                return Vector3.zero;
+            }
+
+            var sum = Vector3.zero;
+            var count = 0;
+            for (var index = 0; index < productPlacements.Count; index++)
+            {
+                var placement = productPlacements[index];
+                if (placement == null)
+                {
+                    continue;
+                }
+
+                sum += placement.position;
+                count++;
+            }
+
+            return count > 0 ? (sum / count) - anchor.position : Vector3.zero;
+        }
+
+        private void HandleColaTableGoldClick()
+        {
+            if (!colaCollectingTableGold
+                || colaTableGoldPayouts == null
+                || colaTableGoldClickIndex >= colaTableGoldPayouts.Length)
+            {
+                return;
+            }
+
+            var amount = Mathf.Max(0, colaTableGoldPayouts[colaTableGoldClickIndex]);
+            colaTableGoldClickIndex++;
+            var source = ResolveColaTableGoldAnchor();
+            SecondFloorVipCoinCollectionPresenter.PlayTipCheckoutClick(source);
+            DataManager.Instance?.ChangeCoinNum(amount);
+            if (colaTableGoldClickIndex >= colaTableGoldPayouts.Length)
+            {
+                colaCollectingTableGold = false;
+                HideColaTableGoldBubble();
+                return;
+            }
+
+            RefreshColaTableGoldCaption();
+        }
+
+        private void RefreshColaTableGoldCaption()
+        {
+            if (colaTableGoldRoot == null || colaTableGoldPayouts == null)
+            {
+                return;
+            }
+
+            if (colaTableGoldClickIndex < 0 || colaTableGoldClickIndex >= colaTableGoldPayouts.Length)
+            {
+                return;
+            }
+
+            var nextAmount = colaTableGoldPayouts[colaTableGoldClickIndex];
+            var orderButton = colaTableGoldRoot.GetComponentInChildren<TableOrderButtonUI>(true);
+            orderButton?.SetDishCaption($"+{nextAmount}");
+        }
+
+        private void FlushRemainingColaTableGold()
+        {
+            if (!colaCollectingTableGold || colaTableGoldPayouts == null)
+            {
+                colaCollectingTableGold = false;
+                return;
+            }
+
+            var remaining = 0;
+            for (var index = colaTableGoldClickIndex; index < colaTableGoldPayouts.Length; index++)
+            {
+                remaining += Mathf.Max(0, colaTableGoldPayouts[index]);
+            }
+
+            colaCollectingTableGold = false;
+            colaTableGoldClickIndex = colaTableGoldPayouts.Length;
+            colaTableGoldPayouts = null;
+            if (remaining > 0)
+            {
+                DataManager.Instance?.ChangeCoinNum(remaining);
+            }
+        }
+
+        private static int[] SplitEscalatingPayouts(int total, int parts)
+        {
+            parts = Mathf.Max(1, parts);
+            total = Mathf.Max(0, total);
+            var chunks = new int[parts];
+            if (total <= 0)
+            {
+                return chunks;
+            }
+
+            if (parts == 1)
+            {
+                chunks[0] = total;
+                return chunks;
+            }
+
+            var weightSum = parts * (parts + 1) / 2;
+            var assigned = 0;
+            for (var index = 0; index < parts - 1; index++)
+            {
+                chunks[index] = Mathf.Max(1, total * (index + 1) / weightSum);
+                assigned += chunks[index];
+            }
+
+            chunks[parts - 1] = total - assigned;
+            if (chunks[parts - 1] >= 1)
+            {
+                return chunks;
+            }
+
+            var deficit = 1 - chunks[parts - 1];
+            chunks[parts - 1] = 1;
+            for (var index = parts - 2; index >= 0 && deficit > 0; index--)
+            {
+                var take = Mathf.Min(deficit, Mathf.Max(0, chunks[index] - 1));
+                chunks[index] -= take;
+                deficit -= take;
+            }
+
+            return chunks;
+        }
+
+        private static int ResolveColaTableGoldClickCount(int servedCount)
+        {
+            if (servedCount >= DataManager.VipColaServeCount)
+            {
+                return Random.Range(ColaTableGoldMoreClickMin, ColaTableGoldMoreClickMax + 1);
+            }
+
+            return Random.Range(ColaTableGoldFirstClickMin, ColaTableGoldFirstClickMax + 1);
         }
 
         private IEnumerator ColaServeAskMoreRoutine()
         {
             yield return ShowVipSpeechRoutine(VipColaAskMoreLine, VipSpeechBubbleSeconds);
             ShowColaServeBubble();
-        }
-
-        private IEnumerator ColaServeThanksRoutine()
-        {
-            yield return ShowVipSpeechRoutine(VipTipThanksLine, VipSpeechBubbleSeconds);
         }
 
         private static void AwardColaServeReward(int servedCount)
