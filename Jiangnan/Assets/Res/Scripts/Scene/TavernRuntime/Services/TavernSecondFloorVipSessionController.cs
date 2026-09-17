@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using JN.Client;
 using JN.Client.Config;
 using JN.Client.Manager;
@@ -30,14 +31,26 @@ namespace JN.Client.Scene
         private const string ColaServeCaption = "上可乐";
         /// <summary>上可乐相对上菜按钮的 UI 像素偏移（右侧）。</summary>
         private static readonly Vector2 ColaServeScreenOffset = new(260f, 16f);
+        /// <summary>秒表挂在上可乐按钮上方。</summary>
+        private static readonly Vector2 ColaDeadlineTimerScreenOffset = new(260f, 148f);
+        private const float ColaServeDeadlineSeconds = 10f;
         private const float VipSpeechBubbleSeconds = 2f;
         private const float FarewellBubbleSeconds = 3f;
         private const float VipMenuCookDurationScale = 0.45f;
         private const int TipCheckoutClickCount = 6;
         private const string VipSitOrderLine = "把最好的端上来";
         private const string VipTipThanksLine = "我很满意，给你小费";
-        private const string VipColaAskMoreLine = "不够，再来一瓶！";
-        private const string VipColaHappyMoreLine = "痛快！太过瘾了！";
+        private static readonly string[] VipColaAskMoreDialogLines =
+        {
+            "不够，再来一瓶！"
+        };
+        private static readonly string[] VipColaEcstasyDialogLines =
+        {
+            "痛快！太过瘾了！",
+            "这才叫活着！美得我五脏六腑都舒泰了！"
+        };
+        private static readonly Vector3 VipStarHeadWorldOffset = new(0f, 0.12f, 0f);
+        private static readonly Vector2 VipStarHeadScreenOffset = new(0f, 78f);
         private const int ColaTableGoldFirstClickMin = 4;
         private const int ColaTableGoldFirstClickMax = 5;
         private const int ColaTableGoldMoreClickMin = 10;
@@ -53,6 +66,12 @@ namespace JN.Client.Scene
         {
             "这菜味道寡淡，平平无奇。",
             "简直是浪费我的时间！"
+        };
+        private static readonly string[] ColaDeadlineRageLines =
+        {
+            "气死我了！！",
+            "连瓶可乐都等不及！",
+            "这种店休想再留我！"
         };
         private static readonly string[] VipMenuDishPraiseLines =
         {
@@ -73,6 +92,10 @@ namespace JN.Client.Scene
         private const string ChefBaseLayerCookState = "Base Layer.Cook";
         private const string ChefCookTrigger = "TrCook";
         private const float ChefCookAnimPulseSeconds = 1.35f;
+        private Transform cachedVipStarFollowTarget;
+        private bool cameraDialogFlyActive;
+        private Vector3 cameraDialogFlyOriginPosition;
+        private Quaternion cameraDialogFlyOriginRotation;
 
         [SerializeField] private float staffMoveArriveDistance = 0.35f;
         [SerializeField] private float staffMoveTimeoutSeconds = 12f;
@@ -107,6 +130,7 @@ namespace JN.Client.Scene
         private bool colaServing;
         private bool colaSequenceBusy;
         private bool colaOfferUnlocked;
+        private bool colaDeadlineTimedOut;
         private bool colaCollectingTableGold;
         private int colaTableGoldClickIndex;
         private int[] colaTableGoldPayouts;
@@ -278,6 +302,8 @@ namespace JN.Client.Scene
             FlushRemainingColaTableGold();
             HideColaTableGoldBubble();
             HideVipSatisfactionStars();
+            HideVipColaDeadlineTimer();
+            RestoreCameraAfterDialogFly(immediate: true);
             if (colaServing)
             {
                 VideoWindowController.HideActiveWindow();
@@ -435,6 +461,8 @@ namespace JN.Client.Scene
             var needsHomeStyleServe = !servedFlags[0] && eatenCount <= 0;
             if (needsHomeStyleServe)
             {
+                GameAudioManager.PlayVipSatisfied();
+                yield return ShowVipSpeechRoutine(VipSitOrderLine, VipSpeechBubbleSeconds);
                 yield return AwaitPlayerOrderRoutine();
                 yield return ServeFirstDishRoutine();
             }
@@ -449,51 +477,248 @@ namespace JN.Client.Scene
                 ShowVipSatisfactionStars(colaServedCount > 0 ? 5 : 2);
                 if (colaServedCount <= 0)
                 {
-                    yield return AwaitHomeStyleComplaintDialogRoutine();
+                    yield return AwaitHomeStyleEvaluationVnRoutine();
                 }
 
                 colaOfferUnlocked = true;
+                colaDeadlineTimedOut = false;
                 yield return AwaitColaServeCompleteRoutine();
+                if (colaDeadlineTimedOut)
+                {
+                    yield break;
+                }
             }
 
             HideVipSatisfactionStars();
             yield return LeaveAndCleanupRoutine();
         }
 
-        private IEnumerator AwaitHomeStyleComplaintDialogRoutine()
+        private IEnumerator AwaitHomeStyleEvaluationVnRoutine()
         {
+            BeginCameraFlyToEvaluationDialog();
             var done = false;
             HudOverlayService.ShowScriptedDialog(
                 HomeStyleComplaintDialogLines,
                 VipComplaintHeadPic,
-                () => done = true);
+                () => done = true,
+                flyInFromBottom: true);
             while (!done)
             {
                 yield return null;
+            }
+
+            RestoreCameraAfterDialogFly(immediate: false);
+        }
+
+        private void BeginCameraFlyToEvaluationDialog()
+        {
+            var camera = ResolveGameplayCamera();
+            if (camera == null)
+            {
+                return;
+            }
+
+            var camTransform = camera.transform;
+            camTransform.DOKill();
+            cameraDialogFlyOriginPosition = camTransform.position;
+            cameraDialogFlyOriginRotation = camTransform.rotation;
+            cameraDialogFlyActive = true;
+
+            var lookTarget = ResolveVipStarFollowTarget();
+            var lookPosition = lookTarget != null
+                ? lookTarget.position
+                : TavernSecondFloorVipService.SpawnedVipRoot != null
+                    ? TavernSecondFloorVipService.SpawnedVipRoot.transform.position + Vector3.up * 1.2f
+                    : camTransform.position + camTransform.forward * 2f;
+            var targetPosition = Vector3.Lerp(camTransform.position, lookPosition, 0.34f);
+            camTransform.DOMove(targetPosition, 0.7f)
+                .SetEase(Ease.InOutCubic)
+                .SetUpdate(true);
+
+            var desiredForward = (lookPosition - targetPosition).normalized;
+            if (desiredForward.sqrMagnitude > 0.001f)
+            {
+                var blendedForward = Vector3.Slerp(camTransform.forward, desiredForward, 0.4f);
+                var targetRotation = Quaternion.LookRotation(blendedForward, camTransform.up);
+                camTransform.DORotateQuaternion(targetRotation, 0.7f)
+                    .SetEase(Ease.InOutCubic)
+                    .SetUpdate(true);
+            }
+        }
+
+        private void RestoreCameraAfterDialogFly(bool immediate)
+        {
+            if (!cameraDialogFlyActive)
+            {
+                return;
+            }
+
+            var camera = ResolveGameplayCamera();
+            if (camera == null)
+            {
+                cameraDialogFlyActive = false;
+                return;
+            }
+
+            var camTransform = camera.transform;
+            camTransform.DOKill();
+            if (immediate)
+            {
+                camTransform.SetPositionAndRotation(cameraDialogFlyOriginPosition, cameraDialogFlyOriginRotation);
+                cameraDialogFlyActive = false;
+                return;
+            }
+
+            camTransform.DOMove(cameraDialogFlyOriginPosition, 0.45f)
+                .SetEase(Ease.InOutQuad)
+                .SetUpdate(true);
+            camTransform.DORotateQuaternion(cameraDialogFlyOriginRotation, 0.45f)
+                .SetEase(Ease.InOutQuad)
+                .SetUpdate(true)
+                .OnComplete(() => cameraDialogFlyActive = false)
+                .OnKill(() =>
+                {
+                    if (camTransform != null)
+                    {
+                        camTransform.SetPositionAndRotation(cameraDialogFlyOriginPosition, cameraDialogFlyOriginRotation);
+                    }
+
+                    cameraDialogFlyActive = false;
+                });
+        }
+
+        private static Camera ResolveGameplayCamera()
+        {
+            if (Camera.main != null)
+            {
+                return Camera.main;
+            }
+
+            return Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null;
+        }
+
+        private IEnumerator AwaitVipScriptedDialogRoutine(string[] lines)
+        {
+            if (lines == null || lines.Length == 0)
+            {
+                yield break;
+            }
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                yield return ShowVipSpeechRoutine(line, VipSpeechBubbleSeconds);
             }
         }
 
         private void ShowVipSatisfactionStars(int litCount)
         {
-            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
-            if (vip == null)
+            var follow = ResolveVipStarFollowTarget();
+            if (follow == null)
             {
                 return;
             }
 
-            HudOverlayService.ShowVipSatisfactionStars(vip.transform, litCount);
+            HudOverlayService.ShowVipSatisfactionStars(
+                follow,
+                litCount,
+                VipStarHeadWorldOffset,
+                VipStarHeadScreenOffset);
         }
 
         private void SetVipSatisfactionStars(int litCount)
         {
-            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
-            HudOverlayService.SetVipSatisfactionStarCount(vip != null ? vip.transform : null, litCount);
+            HudOverlayService.SetVipSatisfactionStarCount(ResolveVipStarFollowTarget(), litCount);
         }
 
         private void HideVipSatisfactionStars()
         {
+            HudOverlayService.ReleaseVipSatisfactionStars(ResolveVipStarFollowTarget());
+            cachedVipStarFollowTarget = null;
+        }
+
+        private Transform ResolveVipStarFollowTarget()
+        {
+            if (cachedVipStarFollowTarget != null)
+            {
+                return cachedVipStarFollowTarget;
+            }
+
             var vip = TavernSecondFloorVipService.SpawnedVipRoot;
-            HudOverlayService.ReleaseVipSatisfactionStars(vip != null ? vip.transform : null);
+            if (vip == null)
+            {
+                return null;
+            }
+
+            cachedVipStarFollowTarget = FindVipHeadBone(vip) ?? EnsureVipHeadHudProxy(vip.transform);
+            return cachedVipStarFollowTarget;
+        }
+
+        private static Transform FindVipHeadBone(GameObject vip)
+        {
+            var animators = vip.GetComponentsInChildren<Animator>(true);
+            for (var index = 0; index < animators.Length; index++)
+            {
+                var animator = animators[index];
+                if (animator == null || !animator.isHuman)
+                {
+                    continue;
+                }
+
+                var head = animator.GetBoneTransform(HumanBodyBones.Head);
+                if (head != null)
+                {
+                    return head;
+                }
+            }
+
+            var transforms = vip.GetComponentsInChildren<Transform>(true);
+            Transform namedHead = null;
+            for (var index = 0; index < transforms.Length; index++)
+            {
+                var node = transforms[index];
+                if (node == null)
+                {
+                    continue;
+                }
+
+                var name = node.name;
+                if (name.Equals("Head", System.StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Bip001 Head", System.StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Bip01 Head", System.StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith(":Head", System.StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith("_Head", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return node;
+                }
+
+                if (namedHead == null && name.IndexOf("head", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    namedHead = node;
+                }
+            }
+
+            return namedHead;
+        }
+
+        private static Transform EnsureVipHeadHudProxy(Transform vipRoot)
+        {
+            var existing = vipRoot.Find("VipStarHeadProxy");
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var proxyObject = new GameObject("VipStarHeadProxy");
+            proxyObject.transform.SetParent(vipRoot, false);
+            var proxy = proxyObject.AddComponent<VipHeadHudProxy>();
+            proxy.Bind(vipRoot);
+            return proxyObject.transform;
         }
 
         /// <summary>大众菜单：点单后做第一道、按表用餐并差评离店（点单已在入座后完成）。</summary>
@@ -897,6 +1122,15 @@ namespace JN.Client.Scene
 
             HideTableHudExceptColaOrGold();
             ShowColaServeBubble();
+            if (colaServedCount <= 0)
+            {
+                yield return AwaitFirstColaClickOrTimeoutRoutine();
+                if (colaDeadlineTimedOut)
+                {
+                    yield break;
+                }
+            }
+
             while (!IsColaFlowFullyFinished())
             {
                 if (DataManager.Instance != null && DataManager.Instance.IsVisitingOtherTavern)
@@ -908,6 +1142,56 @@ namespace JN.Client.Scene
             }
 
             HideColaServeBubble();
+        }
+
+        private IEnumerator AwaitFirstColaClickOrTimeoutRoutine()
+        {
+            var remaining = ColaServeDeadlineSeconds;
+            ShowVipColaDeadlineTimer(remaining);
+            while (remaining > 0f && colaServedCount <= 0 && !colaServing)
+            {
+                HudOverlayService.SetVipColaDeadlineRemaining(remaining);
+                remaining -= Time.deltaTime;
+                yield return null;
+            }
+
+            HideVipColaDeadlineTimer();
+            if (colaServedCount > 0 || colaServing)
+            {
+                yield break;
+            }
+
+            colaDeadlineTimedOut = true;
+            HideColaServeBubble();
+            yield return VipRageLeaveAfterColaTimeoutRoutine();
+        }
+
+        private IEnumerator VipRageLeaveAfterColaTimeoutRoutine()
+        {
+            SetVipSatisfactionStars(0);
+            yield return AwaitVipScriptedDialogRoutine(ColaDeadlineRageLines);
+            yield return LeaveAndCleanupRoutine();
+        }
+
+        private void ShowVipColaDeadlineTimer(float remainingSeconds)
+        {
+            var vip = TavernSecondFloorVipService.SpawnedVipRoot;
+            if (vip == null)
+            {
+                return;
+            }
+
+            HudOverlayService.ShowVipColaDeadlineTimer(
+                vip.transform,
+                ColaServeDeadlineSeconds,
+                VipSeatedButtonOffset,
+                ColaDeadlineTimerScreenOffset);
+            HudOverlayService.SetVipColaDeadlineRemaining(remainingSeconds);
+        }
+
+        private static void HideVipColaDeadlineTimer()
+        {
+            HudOverlayService.ReleaseVipColaDeadlineTimer();
         }
 
         private bool IsColaFlowFullyFinished()
@@ -1438,6 +1722,8 @@ namespace JN.Client.Scene
             HideColaServeBubble();
             HideColaTableGoldBubble();
             HideVipSatisfactionStars();
+            HideVipColaDeadlineTimer();
+            RestoreCameraAfterDialogFly(immediate: true);
             if (colaServing)
             {
                 VideoWindowController.HideActiveWindow();
@@ -1753,6 +2039,7 @@ namespace JN.Client.Scene
                 return;
             }
 
+            HideVipColaDeadlineTimer();
             colaServing = true;
             colaSequenceBusy = true;
             HideColaServeBubble();
@@ -1812,8 +2099,7 @@ namespace JN.Client.Scene
 
                 if (servedCount >= DataManager.VipColaServeCount)
                 {
-                    GameAudioManager.PlayVipSatisfied();
-                    yield return ShowVipSpeechRoutine(VipColaHappyMoreLine, VipSpeechBubbleSeconds);
+                    yield return PlayVipColaEcstasyRoutine();
                 }
 
                 yield return AwaitColaTableGoldSpamRoutine(servedCount);
@@ -2055,8 +2341,176 @@ namespace JN.Client.Scene
 
         private IEnumerator ColaServeAskMoreRoutine()
         {
-            yield return ShowVipSpeechRoutine(VipColaAskMoreLine, VipSpeechBubbleSeconds);
+            yield return AwaitVipScriptedDialogRoutine(VipColaAskMoreDialogLines);
             ShowColaServeBubble();
+        }
+
+        private IEnumerator PlayVipColaEcstasyRoutine()
+        {
+            SetVipSatisfactionStars(5);
+            HudOverlayService.PulseVipSatisfactionStars();
+            GameAudioManager.PlayVipSatisfied();
+            GameAudioManager.PlayVipArrival();
+            SpawnVipColaLoveHearts();
+            yield return AwaitVipScriptedDialogRoutine(VipColaEcstasyDialogLines);
+        }
+
+        private void SpawnVipColaLoveHearts()
+        {
+            var follow = ResolveVipStarFollowTarget();
+            var origin = follow != null
+                ? follow.position + Vector3.up * 0.08f
+                : TavernSecondFloorVipService.SpawnedVipRoot != null
+                    ? TavernSecondFloorVipService.SpawnedVipRoot.transform.position + Vector3.up * 1.4f
+                    : Vector3.zero;
+            var emitRotation = ResolveHeartEmitRotation();
+            PlayHeartBurst(origin, emitRotation, 20, 1.05f, 0.34f, new Color(1f, 0.28f, 0.48f, 1f));
+            PlayHeartBurst(origin, emitRotation, 12, 0.72f, 0.22f, new Color(1f, 0.58f, 0.72f, 1f));
+        }
+
+        private static Quaternion ResolveHeartEmitRotation()
+        {
+            var camera = ResolveGameplayCamera();
+            if (camera == null)
+            {
+                return Quaternion.LookRotation(Vector3.up);
+            }
+
+            return Quaternion.LookRotation(camera.transform.up, -camera.transform.forward);
+        }
+
+        private static void PlayHeartBurst(
+            Vector3 origin,
+            Quaternion emitRotation,
+            short count,
+            float speed,
+            float size,
+            Color color)
+        {
+            var go = new GameObject("VipColaLoveHearts");
+            go.transform.SetPositionAndRotation(origin, emitRotation);
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = false;
+            main.duration = 0.35f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.15f, 1.65f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(speed * 0.65f, speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.7f, size);
+            main.startColor = color;
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.25f, 0.25f);
+            main.gravityModifier = 0f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = count;
+            main.stopAction = ParticleSystemStopAction.Destroy;
+
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, count) });
+
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 18f;
+            shape.radius = 0.06f;
+            shape.rotation = Vector3.zero;
+
+            var colorOverLifetime = ps.colorOverLifetime;
+            colorOverLifetime.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(color, 0f),
+                    new GradientColorKey(new Color(1f, 0.72f, 0.8f, 1f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey(1f, 0.12f),
+                    new GradientAlphaKey(1f, 0.55f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            colorOverLifetime.color = gradient;
+
+            var sizeOverLifetime = ps.sizeOverLifetime;
+            sizeOverLifetime.enabled = true;
+            sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.55f, 1f, 1.15f));
+
+            var rotationOverLifetime = ps.rotationOverLifetime;
+            rotationOverLifetime.enabled = true;
+            rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                         ?? Shader.Find("Sprites/Default")
+                         ?? Shader.Find("Unlit/Texture");
+            if (shader != null)
+            {
+                var material = new Material(shader)
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                var heartTexture = GetHeartTexture();
+                if (heartTexture != null)
+                {
+                    material.mainTexture = heartTexture;
+                    if (material.HasProperty("_BaseMap"))
+                    {
+                        material.SetTexture("_BaseMap", heartTexture);
+                    }
+
+                    if (material.HasProperty("_BaseColor"))
+                    {
+                        material.SetColor("_BaseColor", Color.white);
+                    }
+                }
+
+                renderer.material = material;
+            }
+
+            ps.Play();
+            UnityEngine.Object.Destroy(go, 2.2f);
+        }
+
+        private static Texture2D cachedHeartTexture;
+
+        private static Texture2D GetHeartTexture()
+        {
+            if (cachedHeartTexture != null)
+            {
+                return cachedHeartTexture;
+            }
+
+            const int size = 64;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            var pixels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var u = (x / (size - 1f) - 0.5f) * 2.45f;
+                    var v = (y / (size - 1f) - 0.40f) * 2.45f;
+                    var xx = u * u;
+                    var yy = v * v;
+                    var a = xx + yy - 1f;
+                    pixels[y * size + x] = a * a * a - xx * yy * v <= 0f
+                        ? Color.white
+                        : Color.clear;
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            cachedHeartTexture = texture;
+            return cachedHeartTexture;
         }
 
         private static void AwardColaServeReward(int servedCount)
@@ -2322,6 +2776,50 @@ namespace JN.Client.Scene
             }
 
             return false;
+        }
+
+        /// <summary>没有人形头骨时，把星星锚在可见网格最高点。</summary>
+        private sealed class VipHeadHudProxy : MonoBehaviour
+        {
+            private Transform vipRoot;
+            private Renderer[] renderers;
+
+            public void Bind(Transform root)
+            {
+                vipRoot = root;
+                renderers = root.GetComponentsInChildren<Renderer>(true);
+            }
+
+            private void LateUpdate()
+            {
+                if (vipRoot == null)
+                {
+                    return;
+                }
+
+                var top = vipRoot.position + Vector3.up * 1.45f;
+                var maxY = float.MinValue;
+                if (renderers != null)
+                {
+                    for (var index = 0; index < renderers.Length; index++)
+                    {
+                        var renderer = renderers[index];
+                        if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy)
+                        {
+                            continue;
+                        }
+
+                        var bounds = renderer.bounds;
+                        if (bounds.max.y > maxY)
+                        {
+                            maxY = bounds.max.y;
+                            top = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+                        }
+                    }
+                }
+
+                transform.position = top;
+            }
         }
     }
 }

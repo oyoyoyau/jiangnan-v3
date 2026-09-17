@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using cfg;
+using DG.Tweening;
 using JN.Client.Config;
 using QFramework;
 using TMPro;
@@ -23,6 +24,9 @@ namespace JN.Client.UI
         /// <summary>脚本台词使用的立绘键，如 fushang。</summary>
         public string ScriptedHeadPic;
 
+        /// <summary>打开时从下方飞入对话框。</summary>
+        public bool FlyInFromBottom;
+
         /// <summary>全部台词播完并关闭后回调。</summary>
         public Action OnComplete;
     }
@@ -43,11 +47,16 @@ namespace JN.Client.UI
         private int lineIndex;
         private bool completeInvoked;
         private bool usingScriptedLines;
+        private RectTransform rootRect;
+        private Vector2 rootHomeAnchoredPosition;
+        private bool hasRootHome;
+        private Tween rootFlyTween;
 
         protected override void OnPanelInit()
         {
             EnsureNodes();
             BindDialogAdvanceButtons();
+            CacheRootHome();
         }
 
         protected override void OnPanelOpen(DialogPanelControllerData data)
@@ -90,6 +99,7 @@ namespace JN.Client.UI
             }
 
             ShowCurrentLine();
+            PlayFlyInIfNeeded(data);
         }
 
         protected override void OnPanelShow()
@@ -99,10 +109,64 @@ namespace JN.Client.UI
 
         protected override void OnPanelClose()
         {
+            KillFlyIn();
+            ResetRootHome();
             InvokeCompleteOnce();
             lines.Clear();
             scriptedLines.Clear();
             lineIndex = 0;
+        }
+
+        private void PlayFlyInIfNeeded(DialogPanelControllerData data)
+        {
+            CacheRootHome();
+            if (rootRect == null)
+            {
+                return;
+            }
+
+            KillFlyIn();
+            rootRect.anchoredPosition = rootHomeAnchoredPosition;
+            if (data == null || !data.FlyInFromBottom)
+            {
+                return;
+            }
+
+            rootRect.anchoredPosition = rootHomeAnchoredPosition + new Vector2(0f, -460f);
+            rootFlyTween = rootRect.DOAnchorPos(rootHomeAnchoredPosition, 0.55f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true);
+        }
+
+        private void CacheRootHome()
+        {
+            rootRect ??= ResolveTransform("Root", "Root") as RectTransform;
+            if (rootRect == null || hasRootHome)
+            {
+                return;
+            }
+
+            rootHomeAnchoredPosition = rootRect.anchoredPosition;
+            hasRootHome = true;
+        }
+
+        private void ResetRootHome()
+        {
+            if (rootRect != null && hasRootHome)
+            {
+                rootRect.anchoredPosition = rootHomeAnchoredPosition;
+            }
+        }
+
+        private void KillFlyIn()
+        {
+            rootFlyTween?.Kill();
+            rootFlyTween = null;
+        }
+
+        private void OnDestroy()
+        {
+            KillFlyIn();
         }
 
         private void BindDialogAdvanceButtons()

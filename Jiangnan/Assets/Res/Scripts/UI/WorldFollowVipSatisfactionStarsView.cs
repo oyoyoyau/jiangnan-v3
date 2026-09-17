@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,6 +18,7 @@ namespace JN.Client.UI
 
         private Transform target;
         private Vector3 worldOffset;
+        private Vector2 screenOffset;
         private RectTransform cachedRectTransform;
         private CanvasGroup cachedCanvasGroup;
         private readonly Image[] starImages = new Image[StarCount];
@@ -31,12 +33,44 @@ namespace JN.Client.UI
 
         public Transform FollowTarget => target;
 
+        public void SetScreenOffset(Vector2 offset)
+        {
+            screenOffset = offset;
+        }
+
         public void Initialize()
         {
             EnsureComponents();
             EnsureStarNodes();
             cachedCanvasGroup.blocksRaycasts = false;
             cachedCanvasGroup.interactable = false;
+        }
+
+        public static Sprite GetPlaceholderLitSprite()
+        {
+            return GetLitSprite();
+        }
+
+        public void PlayCelebratePulse()
+        {
+            EnsureStarNodes();
+            for (var index = 0; index < StarCount; index++)
+            {
+                var image = starImages[index];
+                if (image == null)
+                {
+                    continue;
+                }
+
+                var rect = image.rectTransform;
+                rect.DOKill();
+                rect.localScale = Vector3.one;
+                rect.DOScale(1.55f, 0.16f)
+                    .SetEase(Ease.OutBack)
+                    .SetDelay(index * 0.05f)
+                    .SetUpdate(true)
+                    .SetLoops(4, LoopType.Yoyo);
+            }
         }
 
         public Vector3 GetWorldAnchorPosition()
@@ -48,7 +82,18 @@ namespace JN.Client.UI
         {
             if (cachedRectTransform != null)
             {
-                cachedRectTransform.anchoredPosition = position;
+                cachedRectTransform.anchoredPosition = position + screenOffset;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            for (var index = 0; index < StarCount; index++)
+            {
+                if (starImages[index] != null)
+                {
+                    starImages[index].rectTransform.DOKill();
+                }
             }
         }
 

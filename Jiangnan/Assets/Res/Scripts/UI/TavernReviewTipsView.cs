@@ -12,16 +12,23 @@ namespace JN.Client.UI
         public const float DefaultHeadOffsetY = TavernWorldRuntimeHudLayout.CustomerReviewHeightOffset;
 
         private const string TipTextNodeName = "txt_Review";
+        private const string FrameNodeName = "frame";
+        private const float GuestFontSize = 30f;
+        private const float MaxTextWidth = 360f;
 
         [SerializeField] private TMP_Text tipText;
 
         private RectTransform cachedRectTransform;
+        private RectTransform frameRect;
         private CanvasGroup cachedCanvasGroup;
         private Transform followTarget;
         private Vector3 worldOffset = new(0f, DefaultHeadOffsetY, 0f);
         private bool screenVisible = true;
         private float remainingLifetimeSeconds = -1f;
         private bool hasLifetimeLimit;
+        private Vector2 defaultTextSize;
+        private Vector2 defaultFrameSize;
+        private bool hasCachedDefaultLayout;
 
         /// <summary>容器据此销毁。</summary>
         public bool ShouldRelease { get; private set; }
@@ -49,6 +56,7 @@ namespace JN.Client.UI
             {
                 tipText.text = content ?? string.Empty;
                 tipText.raycastTarget = false;
+                FitBubbleToGuestFont();
             }
 
             SetScreenVisible(true);
@@ -130,6 +138,60 @@ namespace JN.Client.UI
                     ? textTransform.GetComponent<TMP_Text>()
                     : GetComponentInChildren<TMP_Text>(true);
             }
+
+            frameRect ??= transform.Find(FrameNodeName) as RectTransform;
+            CacheDefaultLayout();
+        }
+
+        private void CacheDefaultLayout()
+        {
+            if (hasCachedDefaultLayout)
+            {
+                return;
+            }
+
+            if (tipText != null)
+            {
+                defaultTextSize = tipText.rectTransform.sizeDelta;
+            }
+
+            if (frameRect != null)
+            {
+                defaultFrameSize = frameRect.sizeDelta;
+            }
+
+            hasCachedDefaultLayout = defaultTextSize.sqrMagnitude > 0.01f;
+        }
+
+        /// <summary>
+        /// 长台词不再靠 auto-size 缩小字号，保持和普通宾客气泡同一字号，气泡跟着撑开。
+        /// </summary>
+        private void FitBubbleToGuestFont()
+        {
+            CacheDefaultLayout();
+            if (tipText == null || !hasCachedDefaultLayout)
+            {
+                return;
+            }
+
+            tipText.enableAutoSizing = false;
+            tipText.fontSize = GuestFontSize;
+            tipText.enableWordWrapping = true;
+            tipText.overflowMode = TextOverflowModes.Overflow;
+
+            var preferred = tipText.GetPreferredValues(tipText.text, MaxTextWidth, 0f);
+            var width = Mathf.Clamp(preferred.x + 12f, defaultTextSize.x, MaxTextWidth);
+            var height = Mathf.Max(defaultTextSize.y, preferred.y + 8f);
+            tipText.rectTransform.sizeDelta = new Vector2(width, height);
+
+            if (frameRect == null || defaultTextSize.x <= 0.01f || defaultTextSize.y <= 0.01f)
+            {
+                return;
+            }
+
+            frameRect.sizeDelta = new Vector2(
+                defaultFrameSize.x * (width / defaultTextSize.x),
+                defaultFrameSize.y * (height / defaultTextSize.y));
         }
     }
 }

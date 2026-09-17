@@ -85,6 +85,8 @@ namespace JN.Client.UI
         private readonly List<TavernWorldWaitHudItemView> activeWaitItems = new();
         private readonly List<WorldFollowOrderButtonView> activeOrderButtons = new();
         private readonly List<WorldFollowVipSatisfactionStarsView> activeSatisfactionStars = new();
+        private WorldFollowVipColaDeadlineTimerView activeColaDeadlineTimer;
+        private readonly List<WorldFollowVipPersuadeBarView> activePersuadeBars = new();
         private readonly List<VipGuestActionView> activeVipGuestActions = new();
         private readonly List<TavernReviewTipsView> activeReviewTips = new();
         private readonly Dictionary<int, TavernDrumUpTipsView> activePulledTips = new();
@@ -118,6 +120,8 @@ namespace JN.Client.UI
             ClearAllItems();
             ClearAllOrderButtons();
             ClearAllSatisfactionStars();
+            ClearColaDeadlineTimer();
+            ClearAllPersuadeBars();
             ClearAllVipGuestActions();
             ClearAllReviewTips();
             ClearAllPulledTips();
@@ -197,6 +201,8 @@ namespace JN.Client.UI
             RefreshEmployActionItems();
             RefreshOrderButtonItems();
             RefreshSatisfactionStarItems();
+            RefreshColaDeadlineTimerItem();
+            RefreshPersuadeBarItems();
             RefreshMyDrumUpButtonItem();
             RefreshVipGuestActionItems();
             RefreshReviewTipItems();
@@ -767,6 +773,160 @@ namespace JN.Client.UI
             }
         }
 
+        public void PulseVipSatisfactionStars()
+        {
+            for (var index = 0; index < activeSatisfactionStars.Count; index++)
+            {
+                activeSatisfactionStars[index]?.PlayCelebratePulse();
+            }
+        }
+
+        public WorldFollowVipColaDeadlineTimerView ShowVipColaDeadlineTimer(
+            Transform target,
+            float totalSeconds,
+            Vector3 worldOffset,
+            Vector2 screenOffset)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            ClearColaDeadlineTimer();
+            EnsureContentRoot();
+            if (ContentRoot == null)
+            {
+                return null;
+            }
+
+            var wrapperObject = new GameObject("VipColaDeadlineTimer", typeof(RectTransform));
+            wrapperObject.transform.SetParent(ContentRoot, false);
+            var item = wrapperObject.AddComponent<WorldFollowVipColaDeadlineTimerView>();
+            item.Initialize();
+            item.BindTarget(target, worldOffset);
+            item.SetScreenOffset(screenOffset);
+            item.SetDeadline(totalSeconds, totalSeconds);
+            activeColaDeadlineTimer = item;
+            return item;
+        }
+
+        public void SetVipColaDeadlineRemaining(float remainingSeconds)
+        {
+            if (activeColaDeadlineTimer == null)
+            {
+                return;
+            }
+
+            activeColaDeadlineTimer.SetRemaining(remainingSeconds);
+        }
+
+        public void ClearColaDeadlineTimer()
+        {
+            if (activeColaDeadlineTimer == null)
+            {
+                return;
+            }
+
+            Destroy(activeColaDeadlineTimer.gameObject);
+            activeColaDeadlineTimer = null;
+        }
+
+        public WorldFollowVipPersuadeBarView ShowVipPersuadeProgressBar(
+            Transform target,
+            float fillAmount,
+            Vector3 worldOffset,
+            Vector2 screenOffset)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < activePersuadeBars.Count; index++)
+            {
+                var existing = activePersuadeBars[index];
+                if (existing == null || existing.FollowTarget != target)
+                {
+                    continue;
+                }
+
+                existing.BindTarget(target, worldOffset);
+                existing.SetScreenOffset(screenOffset);
+                existing.SetFill(fillAmount, animate: false);
+                return existing;
+            }
+
+            EnsureContentRoot();
+            if (ContentRoot == null)
+            {
+                return null;
+            }
+
+            var wrapperObject = new GameObject("VipPersuadeBar", typeof(RectTransform), typeof(CanvasGroup));
+            wrapperObject.transform.SetParent(ContentRoot, false);
+            var item = wrapperObject.AddComponent<WorldFollowVipPersuadeBarView>();
+            item.Initialize();
+            item.BindTarget(target, worldOffset);
+            item.SetScreenOffset(screenOffset);
+            item.SetFill(fillAmount, animate: false);
+            activePersuadeBars.Add(item);
+            return item;
+        }
+
+        public void SetVipPersuadeProgressBar(Transform target, float fillAmount)
+        {
+            for (var index = 0; index < activePersuadeBars.Count; index++)
+            {
+                var item = activePersuadeBars[index];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (target != null && item.FollowTarget != null && item.FollowTarget != target)
+                {
+                    continue;
+                }
+
+                item.SetFill(fillAmount, animate: true);
+            }
+        }
+
+        public void ReleaseVipPersuadeProgressBar(Transform target)
+        {
+            for (var index = activePersuadeBars.Count - 1; index >= 0; index--)
+            {
+                var item = activePersuadeBars[index];
+                if (item == null)
+                {
+                    activePersuadeBars.RemoveAt(index);
+                    continue;
+                }
+
+                if (target != null && item.FollowTarget != null && item.FollowTarget != target)
+                {
+                    continue;
+                }
+
+                Destroy(item.gameObject);
+                activePersuadeBars.RemoveAt(index);
+            }
+        }
+
+        public void ClearAllPersuadeBars()
+        {
+            for (var index = activePersuadeBars.Count - 1; index >= 0; index--)
+            {
+                var item = activePersuadeBars[index];
+                if (item != null)
+                {
+                    Destroy(item.gameObject);
+                }
+            }
+
+            activePersuadeBars.Clear();
+        }
+
         public void ReleaseVipSatisfactionStars(Transform target)
         {
             for (var index = activeSatisfactionStars.Count - 1; index >= 0; index--)
@@ -1112,6 +1272,31 @@ namespace JN.Client.UI
                 return;
             }
 
+            if (activeColaDeadlineTimer != null && activeColaDeadlineTimer.gameObject == root)
+            {
+                ClearColaDeadlineTimer();
+                return;
+            }
+
+            for (var index = activePersuadeBars.Count - 1; index >= 0; index--)
+            {
+                var item = activePersuadeBars[index];
+                if (item == null)
+                {
+                    activePersuadeBars.RemoveAt(index);
+                    continue;
+                }
+
+                if (item.gameObject != root)
+                {
+                    continue;
+                }
+
+                Destroy(item.gameObject);
+                activePersuadeBars.RemoveAt(index);
+                return;
+            }
+
             for (var index = activeVipGuestActions.Count - 1; index >= 0; index--)
             {
                 var item = activeVipGuestActions[index];
@@ -1278,6 +1463,39 @@ namespace JN.Client.UI
                 if (item == null)
                 {
                     activeSatisfactionStars.RemoveAt(index);
+                    continue;
+                }
+
+                RefreshAnchoredItem(
+                    item,
+                    item.GetWorldAnchorPosition(),
+                    (view, position) => view.SetAnchoredPosition(position),
+                    (view, visible) => view.SetVisible(visible));
+            }
+        }
+
+        private void RefreshColaDeadlineTimerItem()
+        {
+            if (activeColaDeadlineTimer == null)
+            {
+                return;
+            }
+
+            RefreshAnchoredItem(
+                activeColaDeadlineTimer,
+                activeColaDeadlineTimer.GetWorldAnchorPosition(),
+                (view, position) => view.SetAnchoredPosition(position),
+                (view, visible) => view.SetVisible(visible));
+        }
+
+        private void RefreshPersuadeBarItems()
+        {
+            for (var index = activePersuadeBars.Count - 1; index >= 0; index--)
+            {
+                var item = activePersuadeBars[index];
+                if (item == null)
+                {
+                    activePersuadeBars.RemoveAt(index);
                     continue;
                 }
 

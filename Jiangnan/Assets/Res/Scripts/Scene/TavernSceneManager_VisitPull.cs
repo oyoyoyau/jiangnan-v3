@@ -34,8 +34,19 @@ namespace JN.Client.Scene
         /// <summary>拜访拉客兜底门口坐标（找不到 JiaoziEndPoint 时用）。</summary>
         private static readonly Vector3 VisitJiaoziWorldPosition = new(-0.9f, JiaoziServiceWorldY, -0.24f);
         private static readonly Vector3 DrumUpWorldOffset = new(0f, 1.15f, 0f);
+        private static readonly Vector3 VipPersuadeBarWorldOffset = new(0f, 0.06f, 0f);
+        private static readonly Vector2 VipPersuadeBarScreenOffset = new(0f, -46f);
         /// <summary>DrumUpBtn 不能拉客时图标色（#646464，alpha=1）。</summary>
         private static readonly Color DrumUpBtnInsufficientIconColor = new(0x64 / 255f, 0x64 / 255f, 0x64 / 255f, 1f);
+        private const int VisitVipPersuadeDialogCount = 4;
+        private const float VisitVipPersuadeBubbleSeconds = 2.2f;
+        private static readonly string[] VisitVipPersuadeDialogLines =
+        {
+            "去去去，本大爷在这儿吃得好好的。",
+            "你们店？我怎么没印象。",
+            "嗯……包厢好酒，听着倒有几分意思。",
+            "也罢，去你店里见识见识！"
+        };
 
         private enum HomeUnloadPhase
         {
@@ -88,6 +99,8 @@ namespace JN.Client.Scene
         private bool hasCachedHomePullReadyForBearer;
         private readonly Dictionary<TavernCustomerRuntimeController, GameObject> visitDrumUpButtons = new();
         private readonly HashSet<TavernCustomerRuntimeController> visitPullingCustomers = new();
+        private readonly Dictionary<TavernCustomerRuntimeController, int> visitVipPersuadeClicks = new();
+        private bool visitVipPersuadeDialogOpen;
 
         private bool IsVisitSimulationRunning =>
             DataManager.Instance != null
@@ -130,6 +143,8 @@ namespace JN.Client.Scene
         {
             visitSimulationActive = false;
             CancelVisitJiaoziDepart();
+            visitVipPersuadeDialogOpen = false;
+            visitVipPersuadeClicks.Clear();
             ClearAllVisitDrumUpButtons();
             RefreshVisitJiaoziVisibility();
         }
@@ -1824,6 +1839,11 @@ namespace JN.Client.Scene
                 ApplyVisitDrumUpBtnCapacityVisual(root, capacityInsufficient);
                 visitDrumUpButtons[customer] = root;
             }
+
+            if (IsVisitPullVipCustomer(customer))
+            {
+                ShowVisitVipPersuadeBar(customer, animate: false);
+            }
         }
 
         private static void ApplyVisitDrumUpCapacityVisual(GameObject root, bool capacityInsufficient)
@@ -1924,6 +1944,7 @@ namespace JN.Client.Scene
             }
 
             visitDrumUpButtons.Remove(customer);
+            HideVisitVipPersuadeBar(customer);
         }
 
         private void ClearAllVisitDrumUpButtons()
@@ -1937,10 +1958,12 @@ namespace JN.Client.Scene
             }
 
             visitDrumUpButtons.Clear();
+            visitVipPersuadeClicks.Clear();
+            HudOverlayService.ClearAllVipPersuadeProgressBars();
         }
 
         /// <summary>
-        /// 点击拉客：容量不足出 tips；够则立刻按类型写入待卸队列。
+        /// 点击拉客：容量不足出 tips；贵客需点满四次对话才被说服，其余客人立刻入队。
         /// </summary>
         private void OnClickVisitDrumUp(TavernCustomerRuntimeController customer)
         {
@@ -1956,13 +1979,122 @@ namespace JN.Client.Scene
                 return;
             }
 
+            if (IsVisitPullVipCustomer(customer))
+            {
+                TryPersuadeVisitVip(customer);
+                return;
+            }
+
             TryPullVisitCustomer(customer);
+        }
+
+        private static bool IsVisitPullVipCustomer(TavernCustomerRuntimeController customer)
+        {
+            return ResolvePulledKindFromCustomer(customer) == DataManager.PulledCustomerKindVip;
+        }
+
+        /// <summary>贵客拉客：每次点出一句说服对话，第四句结束后才真正抢走。</summary>
+        private void TryPersuadeVisitVip(TavernCustomerRuntimeController customer)
+        {
+            if (!IsVisitSimulationRunning || customer == null || visitPullingCustomers.Contains(customer))
+            {
+                return;
+            }
+
+            if (visitVipPersuadeDialogOpen)
+            {
+                return;
+            }
+
+            visitVipPersuadeClicks.TryGetValue(customer, out var clicks);
+            if (clicks >= VisitVipPersuadeDialogCount)
+            {
+                visitVipPersuadeClicks.Remove(customer);
+                TryPullVisitCustomer(customer);
+                return;
+            }
+
+            clicks++;
+            visitVipPersuadeClicks[customer] = clicks;
+            ShowVisitVipPersuadeBar(customer, animate: true);
+            var lineIndex = Mathf.Clamp(clicks - 1, 0, VisitVipPersuadeDialogLines.Length - 1);
+            var line = VisitVipPersuadeDialogLines[lineIndex];
+            var shouldPullAfterDialog = clicks >= VisitVipPersuadeDialogCount;
+            HudOverlayService.ShowCustomerReviewTip(
+                customer.transform,
+                line,
+                durationSeconds: shouldPullAfterDialog ? 3f : VisitVipPersuadeBubbleSeconds);
+            if (shouldPullAfterDialog)
+            {
+                visitVipPersuadeDialogOpen = true;
+                StartCoroutine(FinishVisitVipPersuadeAfterFillRoutine(customer));
+                return;
+            }
+
+            visitVipPersuadeDialogOpen = true;
+            StartCoroutine(UnlockVisitVipPersuadeBubbleRoutine());
+        }
+
+        private void ShowVisitVipPersuadeBar(TavernCustomerRuntimeController customer, bool animate)
+        {
+            if (customer == null)
+            {
+                return;
+            }
+
+            visitVipPersuadeClicks.TryGetValue(customer, out var clicks);
+            var fill = Mathf.Clamp01(clicks / (float)VisitVipPersuadeDialogCount);
+            if (animate)
+            {
+                HudOverlayService.ShowVipPersuadeProgressBar(
+                    customer.transform,
+                    Mathf.Max(0f, fill - (1f / VisitVipPersuadeDialogCount)),
+                    VipPersuadeBarWorldOffset,
+                    VipPersuadeBarScreenOffset);
+                HudOverlayService.SetVipPersuadeProgressBar(customer.transform, fill);
+                return;
+            }
+
+            HudOverlayService.ShowVipPersuadeProgressBar(
+                customer.transform,
+                fill,
+                VipPersuadeBarWorldOffset,
+                VipPersuadeBarScreenOffset);
+        }
+
+        private static void HideVisitVipPersuadeBar(TavernCustomerRuntimeController customer)
+        {
+            if (customer == null)
+            {
+                return;
+            }
+
+            HudOverlayService.ReleaseVipPersuadeProgressBar(customer.transform);
+        }
+
+        private IEnumerator UnlockVisitVipPersuadeBubbleRoutine()
+        {
+            yield return new WaitForSeconds(VisitVipPersuadeBubbleSeconds);
+            visitVipPersuadeDialogOpen = false;
+        }
+
+        private IEnumerator FinishVisitVipPersuadeAfterFillRoutine(TavernCustomerRuntimeController customer)
+        {
+            yield return new WaitForSeconds(0.32f);
+            visitVipPersuadeDialogOpen = false;
+            if (customer == null)
+            {
+                yield break;
+            }
+
+            visitVipPersuadeClicks.Remove(customer);
+            TryPullVisitCustomer(customer, showWalkAwayTip: false);
         }
 
         /// <summary>
         /// 点击拉客：立刻按类型写入待卸队列；走向门口仅表现，与卸客数据无关。
         /// </summary>
-        private void TryPullVisitCustomer(TavernCustomerRuntimeController customer)
+        private void TryPullVisitCustomer(TavernCustomerRuntimeController customer, bool showWalkAwayTip = true)
         {
             if (!IsVisitSimulationRunning || customer == null || visitPullingCustomers.Contains(customer))
             {
@@ -1986,6 +2118,8 @@ namespace JN.Client.Scene
             }
 
             visitPullingCustomers.Add(customer);
+            visitVipPersuadeClicks.Remove(customer);
+            HideVisitVipPersuadeBar(customer);
             ReleaseVisitDrumUpButton(customer);
             AbortVisitCustomerBindings(customer);
             // 先记下桌号：离桌后仍用于挂「客人已被我拉走」提示。
@@ -2003,7 +2137,11 @@ namespace JN.Client.Scene
             }
 
             ApplyVisitPullDepartBoost(customer);
-            HudOverlayService.ShowPulledAwayReviewTip(customer.transform);
+            if (showWalkAwayTip)
+            {
+                HudOverlayService.ShowPulledAwayReviewTip(customer.transform);
+            }
+
             customer.LeaveTavern();
             StartCoroutine(ClearVisitPullFlagWhenGone(customer));
 

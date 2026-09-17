@@ -82,12 +82,17 @@ namespace JN.Client.UI
         }
 
         /// <summary>不走配表、直接播指定台词的对话（二楼贵客抱怨等）。</summary>
-        public static void ShowScriptedDialog(string[] lines, string headPicKey, Action onComplete = null)
+        public static void ShowScriptedDialog(
+            string[] lines,
+            string headPicKey,
+            Action onComplete = null,
+            bool flyInFromBottom = false)
         {
             OpenOrReplace<DialogPanelController>(new DialogPanelControllerData
             {
                 ScriptedLines = lines,
                 ScriptedHeadPic = headPicKey,
+                FlyInFromBottom = flyInFromBottom,
                 OnComplete = onComplete
             });
         }
@@ -810,15 +815,23 @@ namespace JN.Client.UI
         }
 
         /// <summary>贵客头顶 5 星满意度（占位贴图，之后可换正式资源）。</summary>
-        public static void ShowVipSatisfactionStars(Transform target, int litCount, Vector3? worldOffset = null)
+        public static void ShowVipSatisfactionStars(
+            Transform target,
+            int litCount,
+            Vector3? worldOffset = null,
+            Vector2? screenOffset = null)
         {
             if (target == null)
             {
                 return;
             }
 
-            var offset = worldOffset ?? new Vector3(0.2f, TavernWorldRuntimeHudLayout.CustomerWaitHeightOffset + 0.55f, 0f);
-            EnsureWorldRuntimeHudPanel()?.ShowVipSatisfactionStars(target, litCount, offset);
+            var offset = worldOffset ?? new Vector3(0f, 0.12f, 0f);
+            var view = EnsureWorldRuntimeHudPanel()?.ShowVipSatisfactionStars(target, litCount, offset);
+            if (view != null && screenOffset.HasValue)
+            {
+                view.SetScreenOffset(screenOffset.Value);
+            }
         }
 
         public static void SetVipSatisfactionStarCount(Transform target, int litCount)
@@ -826,9 +839,67 @@ namespace JN.Client.UI
             EnsureWorldRuntimeHudPanel()?.SetVipSatisfactionStarCount(target, litCount);
         }
 
+        public static void PulseVipSatisfactionStars()
+        {
+            EnsureWorldRuntimeHudPanel()?.PulseVipSatisfactionStars();
+        }
+
         public static void ReleaseVipSatisfactionStars(Transform target)
         {
             EnsureWorldRuntimeHudPanel()?.ReleaseVipSatisfactionStars(target);
+        }
+
+        public static void ShowVipColaDeadlineTimer(
+            Transform target,
+            float totalSeconds,
+            Vector3 worldOffset,
+            Vector2 screenOffset)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            EnsureWorldRuntimeHudPanel()?.ShowVipColaDeadlineTimer(target, totalSeconds, worldOffset, screenOffset);
+        }
+
+        public static void SetVipColaDeadlineRemaining(float remainingSeconds)
+        {
+            EnsureWorldRuntimeHudPanel()?.SetVipColaDeadlineRemaining(remainingSeconds);
+        }
+
+        public static void ReleaseVipColaDeadlineTimer()
+        {
+            EnsureWorldRuntimeHudPanel()?.ClearColaDeadlineTimer();
+        }
+
+        public static void ShowVipPersuadeProgressBar(
+            Transform target,
+            float fillAmount,
+            Vector3 worldOffset,
+            Vector2 screenOffset)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            EnsureWorldRuntimeHudPanel()?.ShowVipPersuadeProgressBar(target, fillAmount, worldOffset, screenOffset);
+        }
+
+        public static void SetVipPersuadeProgressBar(Transform target, float fillAmount)
+        {
+            EnsureWorldRuntimeHudPanel()?.SetVipPersuadeProgressBar(target, fillAmount);
+        }
+
+        public static void ReleaseVipPersuadeProgressBar(Transform target)
+        {
+            EnsureWorldRuntimeHudPanel()?.ReleaseVipPersuadeProgressBar(target);
+        }
+
+        public static void ClearAllVipPersuadeProgressBars()
+        {
+            EnsureWorldRuntimeHudPanel()?.ClearAllPersuadeBars();
         }
 
         /// <summary>
